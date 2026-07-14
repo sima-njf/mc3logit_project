@@ -52,12 +52,3 @@ exposure_dyn <- function(
   ans[order((1:nrow(ans))[ord]),]
 
 }
-
-
-set.seed(123)
-x <- 1:10
-y <- sample(10)
-
-ord <- order(y)
-y[ord]
-y[ord][order(x[ord])] - y

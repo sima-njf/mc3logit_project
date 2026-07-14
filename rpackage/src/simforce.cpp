@@ -2,6 +2,11 @@
 #include <random>
 using namespace Rcpp;
 
+// Anonymous namespace: gives these helper types internal linkage so they
+// cannot collide at link time with same-named classes/templates defined in
+// other translation units of this package.
+namespace {
+
 template <typename T>
 using Vec = std::vector< T >;
 
@@ -171,6 +176,13 @@ public:
       officers[i] = nullptr;
   };
 
+  bool has_officer(int id) const {
+    for (unsigned int j = 0u; j < officers.size(); ++j)
+      if (officers[j]->officer_id == id)
+        return true;
+    return false;
+  }
+
   void add_officer(Officer * o, int years_ = -1) {
     officers.push_back(o);
     if (years_ < 0)
@@ -191,9 +203,6 @@ public:
 };
 
 inline void Event::point(Parameters & p) {
-
-  // An indicator vector telling whether the officer reacted
-  Vec< int > order(this->size(), 0);
 
   // Figuring out the level of violence
   event_violence = (std::abs(p.par_event_violence) > 1e-10) ?
@@ -385,8 +394,6 @@ public:
     return;
   }
 
-  // void get_y
-
 };
 
 inline ForceSim::ForceSim(
@@ -505,14 +512,14 @@ params(female_, years_, rho_, exposure_, context_, fixed_effect_) {
     // How many first
     int event_size = std::min(noff(params.engine), (int) nofficers);
 
-    // Sampling
+    // Sampling, avoiding adding the same officer twice to one event
     int ntries = 0;
-    while ((event_size > 0) & (++ntries < 1000)) {
+    while ((event_size > 0) && (++ntries < 1000)) {
       int proposed_officer = rid(params.engine);
-      for (unsigned int j = 0u; j < events[i]->size(); ++j) {
-        if (proposed_officer == events[i]->officers[j]->officer_id)
-          continue;
-      }
+
+      if (events[i]->has_officer(proposed_officer))
+        continue;
+
       events[i]->add_officer(officers[proposed_officer]);
       event_size--;
 
@@ -583,7 +590,7 @@ inline Vec< double > ForceSim::get_response() {
 
 }
 
-
+} // anonymous namespace
 
 // Simulate Police Force Events
 //
@@ -626,9 +633,6 @@ inline Vec< double > ForceSim::get_response() {
 // - Whether the officer pointed a gun
 //
 // Each row represents one report per officer involved in the event.
-// @export
-// @examples
-// x <- simulate_force(1000, 400)
 // [[Rcpp::export(rng = false, name = "sim_events_cpp")]]
 std::vector< std::vector< double > > sim_events(
   int nevents,
@@ -715,9 +719,3 @@ std::vector<std::vector<double>> sim_events2(
   return ans;
 
 }
-
-/***R
-ans <- simulate_force(10000, 1000, rho = 1, exposure = 1)
-
-summary(glm(pointed ~ -1 + female + years, data = ans, family = binomial("logit")))
-*/

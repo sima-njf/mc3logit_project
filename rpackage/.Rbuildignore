@@ -1,6 +1,5 @@
 ^.*\.Rproj$
 ^\.Rproj\.user$
-^R/clogit\.R$
 ^README\.Rmd$
 ^LICENSE\.md$
 ^CODE_OF_CONDUCT\.md$

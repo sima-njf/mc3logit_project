@@ -5,6 +5,11 @@ using namespace Rcpp;
 // This classes assume there are no duplicates at the level (person, event),
 // and data is properly sorted by (time, event)
 
+// Anonymous namespace: gives these helper types internal linkage so they
+// cannot collide at link time with same-named classes defined in other
+// translation units of this package (e.g. simforce.cpp's unrelated `Event`).
+namespace {
+
 class PersonDyn;
 
 class Event {
@@ -46,6 +51,8 @@ inline void PersonDyn::add_event(int loc, Event* e)
   event_loc.push_back(loc);
   events.push_back(e);
 }
+
+} // anonymous namespace
 
 // Data must be sorted by individual
 // [[Rcpp::export(rng = false, name = "exposure_dyn_")]]
