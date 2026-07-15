@@ -7,6 +7,9 @@
 
 [![Lifecycle:
 experimental](https://img.shields.io/badge/lifecycle-experimental-orange.svg)](https://lifecycle.r-lib.org/articles/stages.html#experimental)
+[![R-CMD-check](https://github.com/sima-njf/mc3logit_project/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/sima-njf/mc3logit_project/actions/workflows/R-CMD-check.yaml)
+[![Codecov test
+coverage](https://codecov.io/gh/sima-njf/mc3logit_project/branch/master/graph/badge.svg)](https://app.codecov.io/gh/sima-njf/mc3logit_project)
 <!-- badges: end -->
 
 The `mc3logit` package implements permutation-based inference for
@@ -16,15 +19,18 @@ matched case-control logit were notably used by Ridgeway (2016).
 ## Installation
 
 <!-- You can install the released version of mc3logit from [CRAN](https://CRAN.R-project.org) with: -->
+
 <!-- ``` r -->
+
 <!-- install.packages("mc3logit") -->
+
 <!-- ``` -->
 
 You can install `mc3logit` from [GitHub](https://github.com/) with:
 
 ``` r
 # install.packages("devtools")
-devtools::install_github("gvegayon/use_of_force", subdir = "rpackage")
+devtools::install_github("sima-njf/mc3logit_project", subdir = "rpackage")
 ```
 
 ## Example
@@ -50,15 +56,15 @@ ans <- clogit_perm(
 print(ans)
 #> 
 #> CONDITIONAL LOGIT (WITH PERMUTATION)
-#>   N events: 83
+#>   N events: 105
 #>     N perm: 1000
-#>          N: 607
-#>        AIC: 94.01
-#>        BIC: 101.27
+#>          N: 625
+#>        AIC: 133.32
+#>        BIC: 141.28
 #> MODEL PARAMETERS (odds):
-#>  female       0.38*** [ 0.57,  1.87] < 0.01
-#>   years       0.59*** [ 1.03,  1.21] < 0.01
-#> exposed       1.78    [ 0.49,  2.36]   0.21
+#>  female       0.71*   [ 0.48,  1.06]   0.10
+#>   years       0.63*** [ 0.48,  0.83] < 0.01
+#> exposed       3.50*** [ 1.66,  7.40] < 0.01
 plot(ans)
 ```
 

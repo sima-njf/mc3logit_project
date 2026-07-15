@@ -1,0 +1,36 @@
+url: https://sima-njf.github.io/mc3logit_project/
+
+template:
+  bootstrap: 5
+
+reference:
+- title: Model fitting
+  desc: Conditional logit with permutation-based inference.
+  contents:
+  - clogit_perm
+  - clogit_loglike
+  - confint.clogit_perm
+  - print.clogit_perm
+  - plot.clogit_perm
+
+- title: Exposure
+  desc: Computing officers' dynamic exposure to peers' prior behavior.
+  contents:
+  - exposure_dyn
+
+- title: Simulation
+  desc: Simulating incident-level data for testing and illustration.
+  contents:
+  - sim_events
+
+- title: Internals
+  desc: Low-level helpers used by clogit_perm().
+  contents:
+  - find_candidates
+  - permute
+
+articles:
+- title: Articles
+  contents:
+  - mc3logit
+  - exposure-dynamics

@@ -11,6 +11,8 @@ reports/
 .Rhistory
 *.docx
 .*
+!.github/
+!.github/**
 *.Rcheck
 *.tar.gz
 *_cache/
