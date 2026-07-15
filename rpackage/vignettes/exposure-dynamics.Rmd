@@ -1,0 +1,91 @@
+---
+title: "Computing dynamic exposure"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Computing dynamic exposure}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment  = "#>"
+)
+```
+
+```{r setup}
+library(mc3logit)
+```
+
+## What is "exposure"?
+
+In the peer-effects use-of-force study `mc3logit` was built for, an
+officer's *exposure* captures whether they have recently witnessed a peer
+take an action (e.g., pointing a weapon), either directly (co-present at
+the same incident) or indirectly (through a peer of a peer). `exposure_dyn()`
+computes this longitudinally, incident by incident, without double
+counting individuals who appear at multiple incidents.
+
+The function takes three parallel vectors -- an individual id, an event
+(incident) id, and a binary action indicator -- and returns cumulative and
+per-event exposure counts.
+
+## A worked example
+
+```{r data}
+dat <- data.frame(
+  event = c(1,1,1, 2,2,2, 3,3,3,3, 4,4,4,4),
+  id    = c(1,2,3, 1,2,4, 2,3,4,5, 5,1,6,2),
+  fired = c(1,1,1, 0,1,1, 0,1,0,1, 1,0,1,1)
+)
+dat
+```
+
+Here, four incidents (`event`) are attended by overlapping sets of
+officers (`id`), each of whom either did (`fired = 1`) or did not
+(`fired = 0`) take the action of interest.
+
+```{r exposure}
+counts <- with(dat, exposure_dyn(
+  id_indiv  = id,
+  id_events = event,
+  actions   = fired,
+  offset    = 0
+))
+
+cbind(dat, counts)
+```
+
+The result has five columns:
+
+- `cumsum`: cumulative count of actions taken so far.
+- `exposure_i` / `exposure_d`: indirect and direct exposure at that event.
+- `exposure_i_cum` / `exposure_d_cum`: their cumulative counterparts.
+
+## The `offset` argument
+
+`offset` shifts the window used to compute exposure relative to the event
+being scored, letting you look further back (or forward) in the sequence
+of incidents. `id_events` need not already be sorted -- `exposure_dyn()`
+orders internally by event id and returns results aligned to the original
+row order.
+
+```{r offset}
+counts_lag1 <- with(dat, exposure_dyn(
+  id_indiv  = id,
+  id_events = event,
+  actions   = fired,
+  offset    = 1
+))
+
+cbind(dat, counts_lag1)
+```
+
+## Using exposure as a predictor
+
+In practice, exposure measures like these are joined back onto the
+simulated (or real) incident data and used as predictors in
+`clogit_perm()`, capturing how a peer's prior behavior is associated with
+an officer's own use-of-force decision -- see the
+`vignette("mc3logit")` for a full modeling example.

@@ -1,0 +1,127 @@
+---
+title: "Getting started with mc3logit"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Getting started with mc3logit}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment  = "#>",
+  fig.width  = 7,
+  fig.height = 5
+)
+```
+
+## Motivation
+
+Matched case-control conditional logistic regression (`survival::clogit()`)
+relies on asymptotic standard errors. When matched sets (strata) are small
+-- as is common when strata are, e.g., officers co-present at the same
+incident -- those asymptotic approximations can be unreliable. `mc3logit`
+addresses this by permuting the outcome *within* strata to build an
+empirical reference distribution for the model coefficients, following the
+permutation approach used by Ridgeway (2016).
+
+This vignette walks through the two core pieces of the package:
+
+1. Simulating incident-level data with `sim_events()`.
+2. Fitting a permutation-based conditional logit with `clogit_perm()`, and
+   inspecting the result with `print()`, `plot()`, and `confint()`.
+
+```{r setup}
+library(mc3logit)
+```
+
+## Simulating data
+
+`sim_events()` generates data similar to that used in the peer-effects
+use-of-force study the package was built for. Officers are simulated with a
+sex, years of experience, and a fixed effect capturing their individual
+propensity to point their weapon. Incidents are simulated with a violence
+level, and each officer present at an incident reacts (or not) following a
+logistic model driven by their own features and by their exposure to peers'
+prior behavior.
+
+```{r simulate, cache=TRUE}
+x <- sim_events(
+  nevents   = 200,
+  nofficers = 300,
+  seed      = 122
+)
+
+head(x)
+```
+
+Each row is one officer's report for one incident (`incidentid`), with
+`pointed000001` recording whether that officer pointed their weapon.
+
+## Fitting the permutation-based conditional logit
+
+`clogit_perm()` has the same formula interface as `survival::clogit()`: the
+outcome, predictors, and a `strata()` term identifying the matched sets
+(here, the incident). Internally it fits the baseline model with
+`survival::clogit()`, then refits the model `nperm` times after permuting
+the outcome within each stratum, building up an empirical distribution for
+each coefficient.
+
+```{r fit, cache=TRUE}
+ans <- clogit_perm(
+  nperm = 1000,
+  pointed000001 ~ female + years + exposed + strata(incidentid),
+  data  = x
+)
+```
+
+### Inspecting the fit
+
+The `print()` method reports odds ratios (or coefficients, with
+`odds = FALSE`) together with permutation-based confidence intervals and
+p-values:
+
+```{r print}
+print(ans)
+```
+
+`plot()` visualizes the same confidence intervals:
+
+```{r plot}
+plot(ans)
+```
+
+### Confidence intervals
+
+`confint()` supports two flavors. `which. = "coef"` (the default) returns a
+confidence interval for the point estimates, using the permutation p-value
+to back out an implied standard error. Passing `which. = "perm"` instead
+returns the empirical quantiles of the permutation distribution itself:
+
+```{r confint}
+confint(ans)
+confint(ans, which. = "perm")
+```
+
+`coef()` and `vcov()` behave as usual, drawing on the baseline fit and the
+permutation-based covariance of the coefficients, respectively:
+
+```{r coef-vcov}
+coef(ans)
+vcov(ans)
+```
+
+## References
+
+Ouellet, F., Hashimi, S., & Vega Yon, G. G. (2023). Peer effects in police
+officers' use of force. *Journal of Quantitative Criminology*.
+\doi{10.1007/s10940-022-09546-9}
+
+Ridgeway, G. (2016). Officer risk factors associated with police shootings:
+a matched case-control study. *Statistics and Public Policy*, 3(1), 1-6.
+\doi{10.1080/2330443X.2015.1129918}
+
+Knijnenburg, T. A., Wessels, L. F. A., Reinders, M. J. T., & Shmulevich, I.
+(2009). Fewer permutations, more accurate p-values. *Bioinformatics*,
+25(12), 161-168. \doi{10.1093/bioinformatics/btp211}
