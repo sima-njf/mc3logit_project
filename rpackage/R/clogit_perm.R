@@ -140,15 +140,19 @@ clogit_perm <- function(
 }
 
 #' @export
+#' @importFrom stats coef
 coef.clogit_perm <- function(object, ...) stats::coef(object$fit)
 
 #' @export
+#' @importFrom stats vcov
 vcov.clogit_perm <- function(object, ...) cov(object$coefs)
 
 #' @export
+#' @importFrom stats formula
 formula.clogit_perm <- function(x, ...) x$formula
 
 #' @export
+#' @importFrom stats nobs
 nobs.clogit_perm <- function(object, ...) {
   stats::nobs(object$fit)
 }
@@ -166,6 +170,7 @@ nobs.clogit_perm <- function(object, ...) {
 #' @param ... Ignored.
 #' @seealso clogit_perm
 #' @export
+#' @importFrom stats qnorm
 confint.clogit_perm <- function(
     object, parm, level = 0.95, which. = "coef",
     sigma_perm= FALSE,

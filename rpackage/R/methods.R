@@ -8,7 +8,7 @@
 #' @export
 #' @param odds Logical scalar. When TRUE it prints the odds ratios.
 #' @param labels Named vector. Changes the labels of the model.
-#' @importFrom stats coef confint cov
+#' @importFrom stats coef confint cov pnorm
 print.clogit_perm <- function(x, odds = TRUE, labels = NULL, out = "ascii", ...) {
 
   cis <- stats::confint(x, ...)
