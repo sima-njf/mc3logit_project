@@ -1,0 +1,161 @@
+---
+title: "Getting Started with mc3logit"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Getting Started with mc3logit}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  fig.width = 7,
+  fig.height = 5
+)
+```
+
+## The problem
+
+`mc3logit` was built for **matched case-control data**, the kind you get when
+several individuals experience the same event and only some of them "act."
+The canonical example (and the one this package ships a simulator for) is a
+police incident: several officers respond to the same call, and some subset
+of them draw and point their firearm. Every incident is a matched set (a
+*stratum*), and within a stratum we want to know which officer- and
+event-level covariates predict the outcome.
+
+`survival::clogit()` already fits this model via a conditional
+(fixed-effects) logistic regression that conditions out the stratum. What
+`mc3logit` adds is **permutation-based inference** on top of that fit:
+instead of trusting the asymptotic standard errors from `clogit()` (which
+can be unreliable with small strata or rare events), `clogit_perm()`
+repeatedly shuffles the outcome *within* comparable strata and refits the
+model, building an empirical null distribution for every coefficient. This
+is the approach used by Ridgeway (2016) for exactly this kind of
+matched-officer data.
+
+## Installation
+
+```r
+# install.packages("devtools")
+devtools::install_github("sima-njf/mc3logit_project")
+```
+
+```{r setup}
+library(mc3logit)
+```
+
+## Step 1: get some matched case-control data
+
+If you don't have your own data yet, `sim_events()` will simulate a
+plausible dataset: officers respond to incidents, and whether each officer
+points their firearm is generated from a logistic model that depends on the
+officer's sex, years of experience, whether they were exposed to a previous
+incident, and the violence level of the event.
+
+```{r sim-data}
+set.seed(1)
+x <- sim_events(
+  nevents   = 300,
+  nofficers = 200,
+  par_officer_female = -.5,
+  par_officer_years  = -.5,
+  par_exposure_event = 0,
+  par_exposure_prev  = .5,
+  par_event_violence = 1,
+  seed = 122
+)
+
+head(x)
+```
+
+Every row is one officer's report for one incident. `incidentid` is the
+matched-set identifier (the *stratum*), and `pointed000001` is the binary
+outcome (did that officer point their gun during that incident).
+
+## Step 2: fit the permutation-based conditional logit
+
+`clogit_perm()` has the same model interface as `survival::clogit()` --
+you write a formula with a `strata()` term for the matched-set id -- plus
+one extra argument, `nperm`, for how many permutations to draw.
+
+```{r fit, cache=TRUE}
+ans <- clogit_perm(
+  nperm = 1000,
+  pointed000001 ~ female + years + exposed + strata(incidentid),
+  data  = x,
+  ncpus = 2   # keep vignette builds fast/portable; raise this for real analyses
+)
+```
+
+Internally this:
+
+1. Fits the baseline model once with `survival::clogit()`.
+2. Uses `find_candidates()` to figure out, for every officer/report, which
+   other rows could plausibly be swapped with it (see the
+   `vignette("permutation-inference")` vignette for the matching rule).
+3. Draws `nperm` permutations of the outcome with `permute()`, refits the
+   model each time, and collects the coefficient estimates.
+4. Turns the spread of those `nperm` coefficient estimates into two-sided
+   permutation p-values.
+
+## Step 3: read the results
+
+```{r print}
+print(ans)
+```
+
+By default coefficients are reported as **odds ratios** (`odds = TRUE`);
+pass `odds = FALSE` to `print()` to see the raw log-odds coefficients
+instead. Stars follow the usual convention (`***` p <= .01, `**` p <= .05,
+`*` p <= .1), where the p-value is the *permutation* p-value, not the
+Wald p-value from `clogit()`.
+
+```{r plot}
+plot(ans, odds = TRUE)
+```
+
+`plot.clogit_perm()` draws a forest plot of the coefficients (or odds
+ratios) with their permutation-based confidence intervals, which is often
+the fastest way to communicate results in a talk or paper.
+
+## Step 4: extract what you need programmatically
+
+`clogit_perm` objects support the usual accessor generics, so they play
+nicely with other tools:
+
+```{r accessors}
+coef(ans)           # point estimates, from the baseline clogit() fit
+confint(ans)         # normal-approximation CI built from the permutation p-values
+head(vcov(ans))       # covariance matrix estimated *from* the permutation draws
+nobs(ans)             # number of observations used in the baseline fit
+formula(ans)          # the model formula
+```
+
+Two flavors of confidence interval are available through the `which.`
+argument of `confint()`:
+
+- `which. = "coef"` (the default): a normal-approximation interval whose
+  standard error is backed out from the permutation p-value (or, with
+  `sigma_perm = TRUE`, from the empirical standard deviation of the
+  permuted coefficients).
+- `which. = "dist"` (anything other than `"coef"`): the raw empirical
+  quantiles of the permutation distribution itself.
+
+```{r confint-variants}
+confint(ans, which. = "coef")
+confint(ans, which. = "coef", sigma_perm = TRUE)
+```
+
+See `vignette("permutation-inference")` for the details of how the
+p-values and both types of interval are constructed, and
+`vignette("simulating-data")` / `vignette("dynamic-exposure")` for the two
+data-generation helpers (`sim_events()`/`sim_events2()` and
+`exposure_dyn()`) used to build the covariates above.
+
+## References
+
+Ridgeway, G. (2016). Officer risk factors associated with police shootings:
+a matched case-control study. *Statistics and Public Policy*, 3(1), 1-6.

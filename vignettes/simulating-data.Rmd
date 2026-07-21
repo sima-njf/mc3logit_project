@@ -1,0 +1,185 @@
+---
+title: "Simulating Matched Case-Control Data"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Simulating Matched Case-Control Data}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  fig.width = 7,
+  fig.height = 5
+)
+```
+
+```{r setup}
+library(mc3logit)
+```
+
+`mc3logit` ships two C++-backed simulators, `sim_events()` and
+`sim_events2()`, that generate data with exactly the matched-set structure
+`clogit_perm()` expects. They're useful for three things: learning the
+package without needing real (often restricted) incident data, checking
+that a model recovers known parameters, and running power / type-I-error
+simulations.
+
+## The data-generating process
+
+`sim_events()` builds a synthetic police force and a sequence of incidents:
+
+1. **Officers** are generated once: `Female ~ Bernoulli(0.5)`, years of
+   experience `~ DiscreteUnif(min_year, max_year)`, and an "action rate"
+   `~ Unif(min_rate, max_rate)` governing how quickly that officer reacts
+   within an incident.
+2. **Incidents** are generated one at a time. Each draws
+   `nofficers ~ DiscreteUnif(min_per_event, max_per_event)` responding
+   officers. Within the incident, officers react sequentially (a Poisson
+   process driven by each officer's action rate), and whether an officer
+   points their firearm is a logistic function of:
+   - their sex (`par_officer_female`),
+   - their years of experience (`par_officer_years`),
+   - whether *anyone else* in the incident has already pointed
+     (`par_exposure_event`),
+   - whether the officer was exposed in a *previous* incident
+     (`par_exposure_prev`), and
+   - the incident's violence level (`par_event_violence`), plus an
+     officer-level fixed effect (`par_officer_fe`).
+
+Every row of the returned data frame is one officer's report for one
+incident.
+
+```{r sim-basic}
+set.seed(1)
+x <- sim_events(nevents = 1000, nofficers = 400)
+str(x)
+```
+
+```{r sim-columns, echo = FALSE, results = "asis"}
+knitr::kable(data.frame(
+  column = c(
+    "officerid", "female", "years", "fixed_effect", "incidentid",
+    "violence_level", "response_time", "first", "exposed",
+    "pointed000001, ..."
+  ),
+  meaning = c(
+    "Officer id",
+    "1 if the officer is female",
+    "Years of experience",
+    "Officer's latent propensity to point the gun",
+    "Incident id (the *stratum* for clogit)",
+    "Violence level of the incident",
+    "Simulated response time of the officer",
+    "1 if the officer was first to react",
+    "1 if the officer was exposed in a previous incident",
+    "Binary outcome(s): did the officer point the gun"
+  )
+))
+```
+
+## Tuning the effect sizes
+
+Every `par_*` argument is a coefficient in the underlying logistic model,
+so you can dial in exactly the effect sizes you want to test for:
+
+```{r sim-tuned, cache=TRUE}
+x <- sim_events(
+  nevents             = 20000,
+  nofficers           = 200,
+  par_officer_female  = -.5,
+  par_officer_years   = -.5,
+  par_exposure_event  = -.5,
+  par_event_violence  = 1,
+  par_exposure_prev   = .25,
+  par_officer_fe      = 1,
+  seed                = 445
+)
+```
+
+Because the data-generating parameters are known exactly, you can check
+that a *full* model (one that also knows the latent `fixed_effect` and
+`violence_level`, which a real analysis usually cannot observe) recovers
+them:
+
+```{r sim-recover}
+ans <- glm(
+  pointed000001 ~ -1 + female + years + exposed + I(-first) + fixed_effect +
+    violence_level,
+  data = x, family = binomial()
+)
+summary(ans)
+```
+
+## Multiple replicate outcomes: `nsims`
+
+For power analyses or type-I-error checks you typically want *many*
+independent draws of the outcome, holding the officers/incidents (and
+hence covariates) fixed. Setting `nsims > 1` does exactly that: the officer
+and incident structure is generated once, and `nsims` independent outcome
+columns (`pointed000001`, `pointed000002`, ...) are appended.
+
+```{r sim-nsims}
+x <- sim_events(nevents = 200, nofficers = 150, nsims = 5, seed = 10)
+grep("^pointed", colnames(x), value = TRUE)
+```
+
+This is the pattern you'd use to, for example, estimate the empirical
+size of `clogit_perm()`'s permutation test under a true null: simulate many
+replicate outcomes with `par_officer_female = 0` and check that the
+fraction of replicates with `pvals["female"] <= .05` is close to `0.05`.
+
+```{r type1-sketch, eval = FALSE}
+reps <- sim_events(
+  nevents = 300, nofficers = 200, nsims = 200,
+  par_officer_female = 0,   # true null for "female"
+  seed = 99
+)
+
+rejected <- sapply(grep("^pointed", colnames(reps), value = TRUE), function(outcome) {
+  f <- as.formula(paste(outcome, "~ female + years + strata(incidentid)"))
+  fit <- clogit_perm(nperm = 500, f, data = reps, ncpus = 1)
+  fit$pvals["female"] <= .05
+})
+
+mean(rejected)  # should be close to 0.05
+```
+
+## Using your own officers and events: `sim_events2()`
+
+`sim_events()` generates officer- and incident-level covariates for you.
+If you already have a real (or externally simulated) roster of officers
+and incidents and just want to simulate *reactions* on top of them, use
+`sim_events2()` instead -- it takes the event/officer structure as input
+rather than generating it:
+
+```{r sim-events2}
+set.seed(2)
+n_reports <- 500
+
+x2 <- sim_events2(
+  event_id       = sample(1:100, n_reports, replace = TRUE),
+  officer_id     = sample(1:60,  n_reports, replace = TRUE),
+  officer_female = rbinom(n_reports, 1, .4),
+  officer_years  = sample(0:15, n_reports, replace = TRUE),
+  par_officer_female = -.3,
+  par_officer_years  = -.2,
+  seed = 2
+)
+
+head(x2)
+```
+
+This is particularly handy when you want to hold the *matching structure*
+of a real dataset fixed (same officers responding to the same incidents in
+the same group sizes) while simulating counterfactual outcome-generating
+processes on top of it -- e.g. to build a study-specific power curve before
+collecting or requesting real data.
+
+## Next steps
+
+See `vignette("getting-started")` for fitting `clogit_perm()` on simulated
+data end to end, and `vignette("dynamic-exposure")` for computing exposure
+covariates (like the `exposed` column above) from a raw event log.

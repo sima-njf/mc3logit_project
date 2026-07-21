@@ -1,0 +1,210 @@
+---
+title: "How the Permutation Inference Works"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{How the Permutation Inference Works}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  fig.width = 7,
+  fig.height = 5
+)
+```
+
+```{r setup}
+library(mc3logit)
+```
+
+This vignette walks through the machinery behind `clogit_perm()`: how
+candidate permutations are found, how the permutation itself is drawn, how
+p-values are computed from the permutation distribution, and why that
+matters for matched case-control data specifically.
+
+## Why not just trust `clogit()`'s standard errors?
+
+`survival::clogit()` estimates a conditional (fixed-effects) logistic
+model and reports Wald-type standard errors based on the observed
+information matrix. Those are asymptotically valid, but matched
+case-control studies often have:
+
+- **Many small strata** (e.g. incidents with 2-4 officers each), so the
+  asymptotics kick in slowly.
+- **Rare outcomes** within some strata (e.g. almost nobody points a
+  firearm), which can make the likelihood surface poorly approximated by a
+  quadratic near the MLE.
+
+Permutation inference sidesteps both issues: instead of relying on a
+large-sample approximation, it builds the null distribution of each
+coefficient directly, by refitting the *same* model on data where the
+outcome has been randomly reassigned in a way that respects the matching
+structure. If the covariate truly has no effect, permuted refits should
+produce coefficients "as extreme" as the observed one fairly often; if it
+has a strong effect, the observed coefficient should sit in the tail of the
+permutation distribution.
+
+## Step 1: what's a valid permutation here?
+
+You cannot just shuffle the outcome column globally -- that would break the
+matched-set structure the conditional logit relies on (every stratum needs
+the same *number* of "positive" cases it started with, or the comparison
+stops being apples-to-apples). `find_candidates()` figures out, for every
+row `i`, the set of other rows `j` it could trade outcomes with. For each
+feature (column) `k` of the `features` matrix, define
+`diff = features[i, k] - features[j, k]` (or `abs(diff)` when
+`as_abs[k] = TRUE`); rows `i` and `j` are candidates for each other only if,
+**for every feature**, `lower[k] <= diff <= upper[k]`. In other words,
+`upper`/`lower` define an allowed *band* around zero for the (signed or
+absolute) difference in each matching feature.
+
+Inside `clogit_perm()` the matching feature is simply the (integer-coded)
+stratum id, with `upper = lower = 0` and `as_abs = TRUE` -- i.e. "a row can
+only trade outcomes with another row whose stratum id is identical to its
+own." That's exactly what conditional logit needs: permutations that
+shuffle *within* strata, never across them. Passing a matrix with more
+columns (e.g. stratum id *and* a coarsened covariate) lets you additionally
+restrict swaps to rows that also match on that covariate.
+
+```{r find-candidates}
+strata <- c(1, 1, 1, 2, 2, 3, 3, 3, 3)
+cand   <- find_candidates(
+  features = cbind(as.integer(as.factor(strata))),
+  upper    = 0,
+  lower    = 0,
+  as_abs   = TRUE
+)
+cand
+```
+
+`find_candidates()` returns, for each row, a zero-indexed vector of the
+positions it could be swapped with (including itself). Rows `1:3` (stratum
+1) only ever list each other; rows `6:9` (stratum 3) only ever list each
+other, and so on.
+
+## Step 2: drawing one permutation
+
+`permute()` takes that candidate list and returns one permuted assignment
+consistent with it. Under the hood it repeatedly (a) picks a not-yet-used
+row, (b) picks one of its not-yet-used candidates at random, and (c) swaps
+the two -- i.e. it builds a random **pairwise matching** among rows that
+are mutual candidates, rather than one long cycle through the whole
+stratum. A row that runs out of available candidates (for instance, the
+odd one out in an odd-sized stratum, once everyone else has already been
+paired off) is simply left unswapped for that draw.
+
+```{r permute-once}
+set.seed(1)
+permute(cand) + 1L   # +1 to go back to R's 1-based indexing
+```
+
+`clogit_perm()` calls `permute()` once per requested permutation
+(`nperm`, default `1000`), reassigns the outcome column according to that
+draw, and refits `survival::clogit()` on the permuted data. This is where
+most of the runtime goes, which is why `clogit_perm()` exposes `ncpus` and
+`parallel_args` to spread refits across a cluster.
+
+### Sanity check: is the matching reasonably well spread out?
+
+A quick way to sanity-check `permute()` is to look at how often each row
+ends up swapped with each of its candidates (versus staying put) over many
+draws -- within a stratum, no single pairing should dominate:
+
+```{r uniformity-check}
+set.seed(131)
+grp   <- sample(rep(1:20, each = 10))               # 20 strata of size 10
+cand  <- find_candidates(cbind(as.integer(as.factor(grp))), 0, 0, TRUE)
+perm  <- do.call(rbind, replicate(1000, permute(cand), simplify = FALSE))
+
+# For row 1, what did it get paired with across 1000 draws?
+# (its own index means "left unswapped that draw")
+prop.table(table(perm[, 1] + 1L))
+```
+
+With 10 mutual candidates (including itself) in its stratum, no single
+outcome should dominate the distribution above.
+
+## Step 3: from permuted coefficients to p-values
+
+For each permutation `b = 1, ..., nperm`, `clogit_perm()` records the
+refit coefficient vector `\hat\beta^{(b)}`. The two-sided permutation
+p-value for coefficient `j` is then
+
+$$
+p_j = 2 \cdot \min\left(
+  \frac{1}{B}\sum_{b=1}^B \mathbb{1}\{\hat\beta_j^{(b)} < \hat\beta_j\},\ \
+  1 - \frac{1}{B}\sum_{b=1}^B \mathbb{1}\{\hat\beta_j^{(b)} < \hat\beta_j\}
+\right)
+$$
+
+i.e., "how far into the tail of the permutation distribution does the
+observed coefficient sit, doubled for a two-sided test." This is exactly
+what `clogit_perm()` computes internally (see `pvals` in the returned
+object).
+
+### The zero p-value problem
+
+A p-value of *exactly* zero would mean "not a single one of `nperm`
+permutations was as extreme as the observed data" -- which is a statement
+about your permutation *sample*, not a claim that the true p-value is
+literally zero (the observed, unpermuted arrangement is itself one member
+of the reference distribution, so the true p-value can never be exactly
+zero). Following Knijnenburg et al. (2009), `mc3logit` replaces any
+p-value that rounds to zero with the pseudo-count `1 / nperm`, which is the
+smallest p-value that `nperm` permutations could actually resolve.
+
+```{r pseudo-count}
+ans <- clogit_perm(
+  nperm = 200,
+  pointed000001 ~ female + years + exposed + strata(incidentid),
+  data  = sim_events(300, 200, seed = 122),
+  ncpus = 2
+)
+ans$pvals
+```
+
+If you need finer resolution near very small p-values, increase `nperm`
+(the smallest resolvable p-value is always `1 / nperm`).
+
+## Step 4: two ways to build a confidence interval
+
+`confint.clogit_perm()` offers two interval constructions, both built from
+the same permutation draws but used differently:
+
+1. **`which. = "coef"` (default)** -- treats the coefficient as
+   approximately normal and *inverts* the permutation p-value to obtain an
+   implied standard error, `sigma = |coef / qnorm(pval / 2)|`. This gives a
+   symmetric interval centred on the observed coefficient, and is directly
+   comparable to a Wald interval. Setting `sigma_perm = TRUE` instead uses
+   `sqrt(diag(vcov(object)))` -- i.e., the actual empirical standard
+   deviation of the `nperm` permuted coefficients -- as `sigma`.
+2. **`which. != "coef"`** -- returns the raw empirical quantiles of the
+   permutation distribution itself (e.g. the 2.5th/97.5th percentiles of
+   `\hat\beta_j^{(1)}, ..., \hat\beta_j^{(B)}`), with no normality
+   assumption at all.
+
+```{r two-cis}
+ci_sd <- confint(ans, which. = "coef", sigma_perm = TRUE)
+rbind(
+  normal_from_pval   = confint(ans, which. = "coef")["female", ],
+  normal_from_sd     = ci_sd["female", ],
+  empirical_quantile = confint(ans, which. = "quantile")["female", ]
+)
+```
+
+When the permutation distribution is close to normal, the three should
+roughly agree; large discrepancies are themselves diagnostic of a skewed or
+heavy-tailed reference distribution, in which case the empirical-quantile
+interval is the more trustworthy of the two.
+
+## References
+
+Knijnenburg, T. A., Wessels, L. F. A., Reinders, M. J. T., & Shmulevich, I.
+(2009). Fewer permutations, more accurate P-values. *Bioinformatics*,
+25(12), 161-168. \doi{10.1093/bioinformatics/btp211}
+
+Ridgeway, G. (2016). Officer risk factors associated with police shootings:
+a matched case-control study. *Statistics and Public Policy*, 3(1), 1-6.

@@ -1,0 +1,134 @@
+---
+title: "Computing Dynamic Exposure"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Computing Dynamic Exposure}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+```
+
+```{r setup}
+library(mc3logit)
+```
+
+A recurring covariate in matched case-control studies of contagious
+behavior (peer effects, "exposure to violence," etc.) is: *has this
+individual been near this behavior before, and how much?* `exposure_dyn()`
+computes that kind of running exposure count from a longitudinal event
+log, correctly handling two things that are easy to get wrong by hand:
+
+- **Temporal ordering** -- exposure must only look *backwards* in time.
+- **No double counting** -- an individual's own action in the current event
+  shouldn't count as exposure to themselves.
+
+## The two kinds of exposure
+
+Given a data frame with one row per (individual, event) pair and a binary
+`action` indicator, `exposure_dyn()` distinguishes:
+
+- **Direct exposure** -- did *this* individual act in a *previous* event?
+- **Indirect exposure** -- did *anyone else* act in an event this
+  individual was also present at (previously)?
+
+Both are returned as instantaneous (most-recent-event) and cumulative
+(running total) versions.
+
+## A worked example
+
+```{r toy-data}
+dat <- data.frame(
+  event = c(1, 1, 1,  2, 2, 2,  3, 3, 3, 3,  4, 4, 4, 4),
+  id    = c(1, 2, 3,  1, 2, 4,  2, 3, 4, 5,  5, 1, 6, 2),
+  fired = c(1, 1, 1,  0, 1, 1,  0, 1, 0, 1,  1, 0, 1, 1)
+)
+dat
+```
+
+Reading this as an event log: individuals `1, 2, 3` are all present (and
+all "fire") at event 1; individuals `1, 2, 4` are present at event 2 (only
+`2` and `4` fire); and so on. Rows do not need to arrive pre-sorted by
+event -- `exposure_dyn()` sorts internally and returns results back in your
+original row order.
+
+```{r exposure}
+counts <- with(dat, exposure_dyn(
+  id_indiv  = id,
+  id_events = event,
+  actions   = fired,
+  offset    = 0
+))
+
+cbind(dat, counts)
+```
+
+- `cumsum` is simply the individual's own running total of `actions`, in
+  event order.
+- `exposure_i` / `exposure_i_cum` are the *instantaneous* and *cumulative*
+  **indirect** exposure -- whether/how many times someone *else* fired in
+  an event this individual attended.
+- `exposure_d` / `exposure_d_cum` are the *instantaneous* and *cumulative*
+  **direct** exposure -- the individual's own prior firing history, as seen
+  from a subsequent event.
+
+For example, individual `2` fires at event 1, is present (but does not
+fire) at event 3, and fires again at event 4. By event 3, their cumulative
+direct exposure reflects the one time they'd already fired (at event 1);
+by event 4 it's incremented again to reflect event 3's outcome.
+
+## The `offset` argument
+
+`offset` shifts *how far back* "previous" reaches, in units of events. The
+default `offset = 1` looks at the single most recent event before the
+current one; `offset = 0` (used above, to keep the toy example easy to read
+by hand) instead folds the current event's own outcome in immediately
+rather than lagging it by one step. In practice, use whichever offset
+matches how quickly you believe exposure should "count": `offset = 1` is
+the more common choice for a same-day/next-incident lag, while larger
+offsets let you skip a fixed number of intervening incidents.
+
+```{r offset-compare}
+c0 <- with(dat, exposure_dyn(id, event, fired, offset = 0))[, "exposure_i"]
+c1 <- with(dat, exposure_dyn(id, event, fired, offset = 1))[, "exposure_i"]
+cbind(dat, exposure_i_offset0 = c0, exposure_i_offset1 = c1)
+```
+
+## Using exposure as a `clogit_perm()` covariate
+
+The typical workflow is: compute exposure on your full event log, attach it
+back to your officer-report data frame as a new column, then include it as
+a covariate in `clogit_perm()` just like any other predictor (recall
+`sim_events()`'s own `exposed` column, used throughout
+`vignette("getting-started")`, is conceptually the same kind of variable).
+
+```{r exposure-as-covariate}
+x <- sim_events(nevents = 300, nofficers = 200, seed = 122)
+
+exp_counts <- with(x, exposure_dyn(
+  id_indiv  = officerid,
+  id_events = incidentid,
+  actions   = pointed000001,
+  offset    = 1
+))
+
+x$exposure_i_cum <- exp_counts[, "exposure_i_cum"]
+
+ans <- clogit_perm(
+  nperm = 500,
+  pointed000001 ~ female + years + exposure_i_cum + strata(incidentid),
+  data  = x,
+  ncpus = 2
+)
+print(ans)
+```
+
+Because `exposure_dyn()` is defined purely from the event log (`id_indiv`,
+`id_events`, `actions`) it composes cleanly with any outcome column,
+including any of the `nsims > 1` replicate outcomes discussed in
+`vignette("simulating-data")`.
