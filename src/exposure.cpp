@@ -161,7 +161,7 @@ List exposure(
           if (cumuse[r] > 0)
             ++exp_i_tmp[event_num];
 
-          if ((actions[r] > 0) & (cumuse[r] > 0))
+          if ((actions[r] > 0) && (cumuse[r] > 0))
           {
 
             // Adding to the list
@@ -170,7 +170,7 @@ List exposure(
               &persons[peer_id]
             );
 
-          } else if ((actions[r] == 0) & (cumuse[r] > 0))
+          } else if ((actions[r] == 0) && (cumuse[r] > 0))
           {
 
             // Adding to the list
@@ -179,7 +179,7 @@ List exposure(
               &persons[peer_id]
             );
 
-          } else if ((actions[r] > 0) & (cumuse[r] == 0))
+          } else if ((actions[r] > 0) && (cumuse[r] == 0))
           {
 
             // Adding to the list
@@ -219,16 +219,16 @@ List exposure(
           else if (colleague->first == NOT_COUNTED) {
 
             // Both are
-            if ((actions[r] > 0) & (cumuse[r] > 0)) {
+            if ((actions[r] > 0) && (cumuse[r] > 0)) {
               colleague->first = ID_COUNTED;
               ++exp_i_tmp[event_num];
               ++exp_d_tmp[event_num];
               // Only indirect
-            } else if ((actions[r] == 0) & (cumuse[r] > 0)) {
+            } else if ((actions[r] == 0) && (cumuse[r] > 0)) {
               colleague->first = I_COUNTED;
               ++exp_i_tmp[event_num];
               // Only direct
-            } else if ((actions[r] > 0) & (cumuse[r] == 0)) {
+            } else if ((actions[r] > 0) && (cumuse[r] == 0)) {
               colleague->first = D_COUNTED;
               ++exp_d_tmp[event_num];
             }

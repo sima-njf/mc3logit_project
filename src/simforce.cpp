@@ -261,9 +261,9 @@ inline void Event::point(Parameters & p) {
 
     // Only exposed if I was not the one who pointed
     if (multiple) {
-      if (!pointed[i] & (n_pointed > 0))
+      if (!pointed[i] && (n_pointed > 0))
         officers[i]->previous_expo.push_back(true);
-      else if (pointed[i] & (n_pointed > 1))
+      else if (pointed[i] && (n_pointed > 1))
         officers[i]->previous_expo.push_back(true);
       else
         officers[i]->previous_expo.push_back(false);
