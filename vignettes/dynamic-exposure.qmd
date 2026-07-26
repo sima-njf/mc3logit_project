@@ -66,6 +66,42 @@ all "fire") at event 1; individuals `1, 2, 4` are present at event 2 (only
 event -- `exposure_dyn()` sorts internally and returns results back in your
 original row order.
 
+The whole log fits in one picture, which makes the exposure counts below
+much easier to check by hand. Each column is an event; a filled dot means
+that individual acted, a hollow one means they were present but did not:
+
+```{r}
+#| label: fig-timeline
+#| fig-cap: "The toy event log: who was present at each event, and who acted."
+#| fig-width: 7
+#| fig-height: 4.2
+blue <- "#2a78d6"; grid_col <- "#e1e0d9"
+axis_col <- "#c3c2b7"; muted <- "#898781"
+
+par(mar = c(4.2, 4.2, 3, 1))
+plot(NA, xlim = c(.6, 4.4), ylim = c(.5, 6.5), axes = FALSE,
+     xlab = "Event (time order)", ylab = "Individual",
+     main = "Who was present, and who acted", col.lab = muted,
+     col.main = "#0b0b0b", cex.main = 1.05)
+abline(h = 1:6, col = grid_col, lwd = 1)
+for (e in unique(dat$event))
+  segments(e, min(dat$id[dat$event == e]), e, max(dat$id[dat$event == e]),
+           col = grid_col, lwd = 1)
+
+acted <- dat$fired == 1
+points(dat$event[acted],  dat$id[acted],  pch = 19, col = blue, cex = 1.5)
+points(dat$event[!acted], dat$id[!acted], pch = 21, col = muted,
+       bg = "white", cex = 1.5, lwd = 1.5)
+axis(1, at = 1:4, col = axis_col, col.axis = muted)
+axis(2, at = 1:6, las = 1, tick = FALSE, col.axis = muted)
+legend("topleft", legend = c("Acted", "Present, did not act"),
+       col = c(blue, muted), pt.bg = c(blue, "white"), pch = c(19, 21),
+       bty = "n", text.col = muted, cex = .85, horiz = TRUE)
+```
+
+The vertical connectors mark co-presence: individuals joined by a line were
+at the same event, and so can expose one another.
+
 ```{r}
 #| label: exposure
 counts <- with(dat, exposure_dyn(
@@ -153,7 +189,59 @@ exp_counts <- with(x, exposure_dyn(
 ))
 
 x$exposure_i_cum <- exp_counts[, "exposure_i_cum"]
+x$exposure_d_cum <- exp_counts[, "exposure_d_cum"]
+```
 
+Before using it as a covariate it is worth seeing how the measure actually
+behaves over an individual's history. For the four busiest officers, both
+kinds of exposure climb monotonically, and indirect exposure typically runs
+ahead of direct -- you see peers act more often than you act yourself:
+
+```{r}
+#| label: fig-trajectories
+#| fig-cap: "Cumulative direct and indirect exposure for the four busiest officers."
+#| fig-width: 7
+#| fig-height: 4.8
+blue <- "#2a78d6"; orange <- "#eb6834"
+grid_col <- "#e1e0d9"; axis_col <- "#c3c2b7"; muted <- "#898781"
+
+busiest <- names(sort(table(x$officerid), decreasing = TRUE))[1:4]
+
+par(mfrow = c(2, 2), mar = c(3.2, 3.2, 2.2, .8), oma = c(4.2, 2.6, 3, .4))
+for (o in busiest) {
+  d <- x[x$officerid == as.numeric(o), ]
+  d <- d[order(d$incidentid), ]
+  n <- seq_len(nrow(d))
+  plot(NA, xlim = range(n),
+       ylim = range(c(d$exposure_i_cum, d$exposure_d_cum), na.rm = TRUE),
+       axes = FALSE, xlab = "", ylab = "",
+       main = paste("Officer", o), col.main = muted, cex.main = .95)
+  grid(nx = NA, ny = NULL, col = grid_col, lty = 1)
+  lines(n, d$exposure_i_cum, col = blue,   lwd = 2)
+  lines(n, d$exposure_d_cum, col = orange, lwd = 2)
+  axis(1, col = axis_col, col.axis = muted, cex.axis = .8)
+  axis(2, col = axis_col, col.axis = muted, cex.axis = .8, las = 1)
+}
+
+mtext("Cumulative exposure accumulates over an officer's incidents",
+      outer = TRUE, cex = 1, col = "#0b0b0b", font = 2, line = .9)
+mtext("Incident (in time order)", side = 1, outer = TRUE, col = muted,
+      cex = .9, line = 1.5)
+mtext("Cumulative exposure", side = 2, outer = TRUE, col = muted,
+      cex = .9, line = 1)
+
+par(fig = c(0, 1, 0, 1), oma = c(0, 0, 0, 0), mar = c(0, 0, 0, 0), new = TRUE)
+plot(0, 0, type = "n", bty = "n", xaxt = "n", yaxt = "n", xlab = "", ylab = "")
+legend("bottom", legend = c("Indirect (a peer had acted before)",
+                            "Direct (this officer had acted before)"),
+       col = c(blue, orange), lwd = 2, horiz = TRUE, bty = "n",
+       text.col = muted, cex = .85, seg.len = 1.6, inset = c(0, .005))
+```
+
+With that in hand, the cumulative measure drops straight into the model:
+
+```{r}
+#| label: exposure-model
 ans <- clogit_perm(
   nperm = 500,
   pointed000001 ~ female + years + exposure_i_cum + strata(incidentid),

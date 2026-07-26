@@ -60,12 +60,58 @@ simulations.
 Every row of the returned data frame is one officer's report for one
 incident.
 
+```{mermaid}
+%%| label: fig-dgp
+%%| fig-cap: "How sim_events() builds a dataset."
+flowchart TD
+    A["<b>Officers</b><br/>sex, years of experience,<br/>action rate, fixed effect"]
+    B["<b>Incidents</b><br/>violence level,<br/>1-5 responding officers"]
+    A --> C["<b>Officer x incident</b><br/>one row per report"]
+    B --> C
+    C --> D{"Logistic model<br/>of the par_* coefficients"}
+    D --> E["pointed = 1"]
+    D --> F["pointed = 0"]
+```
+
+Officers are drawn once and reused across incidents, which is what creates
+the repeated-measures structure `exposure_dyn()` later exploits.
+
 ```{r}
 #| label: sim-basic
 set.seed(1)
 x <- sim_events(nevents = 1000, nofficers = 400)
 str(x)
 ```
+
+The matched sets are deliberately small -- that is the regime conditional
+logit is designed for, and the one where asymptotic standard errors are
+least dependable:
+
+```{r}
+#| label: fig-strata
+#| fig-cap: "Distribution of matched-set sizes."
+#| fig-width: 7
+#| fig-height: 4
+blue <- "#2a78d6"; grid_col <- "#e1e0d9"; muted <- "#898781"
+
+sizes <- table(table(x$incidentid))
+
+par(mar = c(4.2, 4.2, 3, 1))
+bp <- barplot(
+  as.numeric(sizes), names.arg = names(sizes), border = NA, col = blue,
+  ylim = c(0, max(sizes) * 1.12),
+  xlab = "Officers in the incident", ylab = "Number of incidents",
+  main = "Matched-set size is uniform on 1-5 by default",
+  col.axis = muted, col.lab = muted, col.main = "#0b0b0b", cex.main = 1.05
+)
+grid(nx = NA, ny = NULL, col = grid_col, lty = 1, lwd = 1)
+barplot(as.numeric(sizes), border = NA, col = blue, add = TRUE, axes = FALSE)
+text(bp, as.numeric(sizes), labels = as.numeric(sizes), pos = 3,
+     col = muted, cex = .8, xpd = NA)
+```
+
+`min_per_event` and `max_per_event` control this range directly, so you can
+generate anything from strictly 1:1 matched pairs to large sets.
 
 ```{r}
 #| label: sim-columns
@@ -143,7 +189,40 @@ data.frame(
 ```
 
 The estimates should land close to the values passed in; residual
-discrepancy shrinks as `nevents` grows.
+discrepancy shrinks as `nevents` grows. Plotted with their confidence
+intervals, the recovery is easier to judge at a glance:
+
+```{r}
+#| label: fig-recovery
+#| fig-cap: "Estimated coefficients against the values used to generate the data."
+#| fig-width: 7
+#| fig-height: 4.5
+orange <- "#eb6834"; axis_col <- "#c3c2b7"
+
+se <- summary(ans)$coefficients[names(truth), "Std. Error"]
+lo <- est - 1.96 * se
+hi <- est + 1.96 * se
+k    <- length(truth)
+ypos <- rev(seq_len(k))
+
+par(mar = c(4.2, 8.5, 3, 1))
+plot(NA, xlim = range(c(lo, hi, truth)) + c(-.15, .15), ylim = c(.5, k + .8),
+     axes = FALSE, xlab = "Coefficient (log-odds)", ylab = "",
+     main = "Simulated effects are recovered", col.lab = muted,
+     col.main = "#0b0b0b", cex.main = 1.05)
+abline(v = pretty(range(c(lo, hi, truth))), col = grid_col, lwd = 1)
+segments(lo, ypos, hi, ypos, col = blue, lwd = 2, lend = 1)
+points(est,   ypos, pch = 19, col = blue,   cex = 1.1)
+points(truth, ypos, pch = 4,  col = orange, cex = 1.2, lwd = 2)
+axis(1, col = axis_col, col.axis = muted, lwd = 1)
+axis(2, at = ypos, labels = names(truth), las = 1, tick = FALSE, col.axis = muted)
+legend("topleft", legend = c("Estimate (95% CI)", "True value"),
+       col = c(blue, orange), pch = c(19, 4), lwd = c(2, NA), lty = c(1, NA),
+       bty = "n", text.col = muted, cex = .85)
+```
+
+Each interval should cover its orange cross. Where it does not, either the
+sample is too small or the model is missing a term the simulator used.
 
 ## Multiple replicate outcomes: `nsims`
 
