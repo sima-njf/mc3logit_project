@@ -51,11 +51,21 @@ jobs:
         run: pkgdown::build_site_github_pages(new_process = FALSE, install = FALSE)
         shell: Rscript {0}
 
+      # The github-pages environment permits deployments only from the
+      # repository's default branch. Gating on that (rather than hard-coding a
+      # branch name) means a push to a non-default branch builds and validates
+      # the site without attempting a deploy that would be rejected -- and the
+      # deploy starts working automatically once the default branch is changed.
       - name: Upload Pages artifact
-        if: github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
+        if: github.event_name != 'pull_request' && github.ref_name == github.event.repository.default_branch
         uses: actions/upload-pages-artifact@v5
         with:
           path: docs
+
+      - name: Note when the deploy is skipped
+        if: github.event_name != 'pull_request' && github.ref_name != github.event.repository.default_branch
+        run: |
+          echo "::notice title=pkgdown deploy skipped::Built the site but did not deploy. Branch '${{ github.ref_name }}' is not the repository default branch ('${{ github.event.repository.default_branch }}'), and the github-pages environment only allows deployments from the default branch. Change the default branch in Settings > General, or add this branch under Settings > Environments > github-pages > Deployment branches."
 
       - name: Upload PR preview artifact
         if: github.event_name == 'pull_request'
@@ -65,7 +75,7 @@ jobs:
           path: docs
 
   deploy:
-    if: github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
+    if: github.event_name != 'pull_request' && github.ref_name == github.event.repository.default_branch
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
