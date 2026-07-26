@@ -1,0 +1,37 @@
+# Compiles paper/paper.md with the Open Journals toolchain, so the JOSS
+# submission is known to build and every bibliography entry is known to
+# resolve before the paper is ever submitted.
+on:
+  push:
+    paths:
+      - paper/**
+      - .github/workflows/draft-pdf.yaml
+  pull_request:
+    paths:
+      - paper/**
+      - .github/workflows/draft-pdf.yaml
+  workflow_dispatch:
+
+name: draft-pdf
+
+permissions: read-all
+
+jobs:
+  paper:
+    runs-on: ubuntu-latest
+    name: Paper draft
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Build draft PDF
+        uses: openjournals/openjournals-draft-action@master
+        with:
+          journal: joss
+          paper-path: paper/paper.md
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: paper
+          path: paper/paper.pdf
+          retention-days: 30

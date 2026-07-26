@@ -10,6 +10,7 @@
 ^Makefile$
 ^data-raw$
 ^playground$
+^paper$
 ^\.github$
 ^\.vscode$
 ^_pkgdown\.ya?ml$
