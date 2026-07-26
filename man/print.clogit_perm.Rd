@@ -9,14 +9,18 @@
 \arguments{
 \item{x}{An object of class \link{clogit_perm}.}
 
-\item{odds}{Logical scalar. When TRUE it prints the odds ratios.}
+\item{odds}{Logical scalar. When \code{TRUE} it will print odds ratios.}
 
-\item{labels}{Named vector. Changes the labels of the model.}
+\item{labels}{A named vector of alternative labels for the model terms.}
 
 \item{out}{Character scalar. When \code{"ascii"} it will print for screen, otherwise,
 it will print for LaTeX.}
 
-\item{...}{Ignored.}
+\item{...}{Passed to \code{\link[=confint.clogit_perm]{confint.clogit_perm()}}.}
+}
+\value{
+\code{x}, invisibly. Called for the side effect of printing a coefficient table
+with permutation-based confidence intervals and p-values.
 }
 \description{
 Print method for clogit_perm

@@ -38,6 +38,11 @@
 
 \item{...}{Ignored}
 }
+\value{
+\code{NULL}, invisibly. Called for its side effect of drawing a forest plot of
+the coefficients (or odds ratios) with their permutation-based confidence
+intervals.
+}
 \description{
 Plot method for \link{clogit_perm} objects
 }

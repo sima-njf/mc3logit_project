@@ -23,6 +23,10 @@ standard errors for computing the CI (only used when \code{which. = "coef"})}
 
 \item{...}{Ignored.}
 }
+\value{
+A two-column matrix with one row per parameter, giving the lower and upper
+bounds of the interval. Column names record the percentiles used.
+}
 \description{
 Confidence interval for CLogit
 }

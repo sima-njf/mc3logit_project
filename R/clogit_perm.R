@@ -3,6 +3,16 @@
 #' @param formula,data,... Parameters passed to [survival::clogit()]
 #' @param ncpus Integer. Number or cores.
 #' @param parallel_args Parameters passed to [parallel::makeCluster()].
+#' @return
+#' An object of class `clogit_perm`, a list with components:
+#' - `pvals` Named numeric vector of two-sided permutation p-values.
+#' - `fit` The baseline [survival::clogit()] fit on the unpermuted data.
+#' - `coefs` Matrix of coefficient estimates, one row per successful
+#'   permutation.
+#' - `candidates` List of row positions belonging to each permutable stratum.
+#' - `formula` The model formula.
+#' - `errors` Data frame of permutations whose refit failed, with columns
+#'   `id` and `msg`.
 #' @export
 #' @importFrom survival clogit
 #' @importFrom stats terms
@@ -165,6 +175,7 @@ clogit_perm <- function(
 }
 
 #' @export
+#' @importFrom stats nobs vcov formula
 coef.clogit_perm <- function(object, ...) stats::coef(object$fit)
 
 #' @export
@@ -189,6 +200,9 @@ nobs.clogit_perm <- function(object, ...) {
 #' @param sigma_perm Logical scalar. When `TRUE`, uses the permutation based
 #' standard errors for computing the CI (only used when `which. = "coef"`)
 #' @param ... Ignored.
+#' @return
+#' A two-column matrix with one row per parameter, giving the lower and upper
+#' bounds of the interval. Column names record the percentiles used.
 #' @seealso clogit_perm
 #' @export
 confint.clogit_perm <- function(

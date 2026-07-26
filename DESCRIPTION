@@ -24,7 +24,6 @@ Description: Implements permutation-based inference for conditional logistic
     Ridgeway (2016) <doi:10.1080/2330443X.2015.1129918>.
 License: MIT + file LICENSE
 Encoding: UTF-8
-LazyData: true
 Roxygen: list(markdown = TRUE)
 RoxygenNote: 7.3.1
 LinkingTo:

@@ -22,6 +22,19 @@ clogit_perm(
 
 \item{parallel_args}{Parameters passed to \code{\link[parallel:makeCluster]{parallel::makeCluster()}}.}
 }
+\value{
+An object of class \code{clogit_perm}, a list with components:
+\itemize{
+\item \code{pvals} Named numeric vector of two-sided permutation p-values.
+\item \code{fit} The baseline \code{\link[survival:clogit]{survival::clogit()}} fit on the unpermuted data.
+\item \code{coefs} Matrix of coefficient estimates, one row per successful
+permutation.
+\item \code{candidates} List of row positions belonging to each permutable stratum.
+\item \code{formula} The model formula.
+\item \code{errors} Data frame of permutations whose refit failed, with columns
+\code{id} and \code{msg}.
+}
+}
 \description{
 Conditional logit with permutation
 }

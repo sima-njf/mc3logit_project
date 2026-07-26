@@ -1,13 +1,14 @@
 #' Print method for clogit_perm
 #' @param x An object of class [clogit_perm].
 #' @param odds Logical scalar. When `TRUE` it will print odds ratios.
-#' @param labels A named list for alternative labels for the model terms.
+#' @param labels A named vector of alternative labels for the model terms.
 #' @param out Character scalar. When `"ascii"` it will print for screen, otherwise,
 #' it will print for LaTeX.
-#' @param ... Ignored.
+#' @param ... Passed to [confint.clogit_perm()].
+#' @return
+#' `x`, invisibly. Called for the side effect of printing a coefficient table
+#' with permutation-based confidence intervals and p-values.
 #' @export
-#' @param odds Logical scalar. When TRUE it prints the odds ratios.
-#' @param labels Named vector. Changes the labels of the model.
 #' @importFrom stats coef confint cov
 print.clogit_perm <- function(x, odds = TRUE, labels = NULL, out = "ascii", ...) {
 
@@ -94,6 +95,10 @@ approx_sd <- function(b, pval) {
 #' @param odds See [confint.clogit_perm].
 #' @param which. See [confint.clogit_perm].
 #' @param ... Ignored
+#' @return
+#' `NULL`, invisibly. Called for its side effect of drawing a forest plot of
+#' the coefficients (or odds ratios) with their permutation-based confidence
+#' intervals.
 #' @importFrom graphics points arrows plot.new plot.window abline axis text
 plot.clogit_perm <- function(
   x,
