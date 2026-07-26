@@ -18,6 +18,10 @@ knitr::opts_chunk$set(
 <!-- badges: start -->
 [![Lifecycle: experimental](https://img.shields.io/badge/lifecycle-experimental-orange.svg)](https://lifecycle.r-lib.org/articles/stages.html#experimental)
 [![R-CMD-check](https://github.com/sima-njf/mc3logit_project/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/sima-njf/mc3logit_project/actions/workflows/R-CMD-check.yaml)
+[![test-coverage](https://github.com/sima-njf/mc3logit_project/actions/workflows/test-coverage.yaml/badge.svg)](https://github.com/sima-njf/mc3logit_project/actions/workflows/test-coverage.yaml)
+[![pkgdown](https://github.com/sima-njf/mc3logit_project/actions/workflows/pkgdown.yaml/badge.svg)](https://github.com/sima-njf/mc3logit_project/actions/workflows/pkgdown.yaml)
+[![codecov](https://codecov.io/gh/sima-njf/mc3logit_project/graph/badge.svg)](https://app.codecov.io/gh/sima-njf/mc3logit_project)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://github.com/sima-njf/mc3logit_project/blob/main/LICENSE.md)
 <!-- badges: end -->
 
 The `mc3logit` package implements permutation-based inference for conditional
@@ -85,22 +89,38 @@ plot(ans)
 
 ## Learning more
 
-The package ships four vignettes with worked examples and background:
+Full documentation, including all vignettes, is at
+<https://sima-njf.github.io/mc3logit_project/>. The package ships five
+vignettes:
 
-- `vignette("getting-started", package = "mc3logit")` -- simulate data, fit
-  `clogit_perm()`, and read off `print()`/`plot()`/`confint()` output.
-- `vignette("permutation-inference", package = "mc3logit")` -- how
-  `find_candidates()`/`permute()` build valid within-stratum permutations,
-  how p-values and confidence intervals are computed, and why permutation
-  inference helps with small/sparse matched strata.
-- `vignette("simulating-data", package = "mc3logit")` -- the `sim_events()`
-  /`sim_events2()` data-generating process, tuning effect sizes, and using
-  `nsims` for power/type-I-error studies.
-- `vignette("dynamic-exposure", package = "mc3logit")` -- computing direct
-  and indirect exposure covariates from an event log with `exposure_dyn()`.
+- `vignette("getting-started")` -- simulate data, fit `clogit_perm()`, and
+  read off `print()`/`plot()`/`confint()` output.
+- `vignette("permutation-inference")` -- how within-stratum permutations are
+  drawn, and how p-values and both flavors of confidence interval are
+  computed.
+- `vignette("validation")` -- measured type-I error and power of the
+  permutation test, plus a documented limitation (see below).
+- `vignette("simulating-data")` -- the `sim_events()`/`sim_events2()`
+  data-generating process, tuning effect sizes, and using `nsims`.
+- `vignette("dynamic-exposure")` -- computing direct and indirect exposure
+  covariates from an event log with `exposure_dyn()`.
 
 Browse them locally with `browseVignettes("mc3logit")` once installed, or
 read the source under [`vignettes/`](vignettes/).
+
+## A note on validity
+
+Permuting the raw outcome builds a reference distribution under the
+*complete* null -- "no covariate matters" -- rather than the *partial* null
+usually of interest, "this covariate doesn't matter, the others may." When
+another covariate in the model carries substantial signal, the reference
+distribution is too narrow and the resulting p-values are
+**anti-conservative**.
+
+`vignette("validation")` measures this directly. Treat `clogit_perm()`
+p-values as reliable when the remaining covariates are weak, and cross-check
+against the Wald p-values in `$fit` otherwise. Residual-permutation schemes
+(Freedman & Lane, 1983) would address it and are not yet implemented.
 
 ## References
 

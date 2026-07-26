@@ -1,20 +1,28 @@
 ---
 title: "Computing Dynamic Exposure"
-output: rmarkdown::html_vignette
+author: "Sima Najafzadeh"
+date: today
+format:
+  html:
+    toc: true
+    toc-depth: 3
 vignette: >
   %\VignetteIndexEntry{Computing Dynamic Exposure}
-  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEngine{quarto::html}
   %\VignetteEncoding{UTF-8}
 ---
 
-```{r, include = FALSE}
+```{r}
+#| label: knitr-setup
+#| include: false
 knitr::opts_chunk$set(
   collapse = TRUE,
-  comment = "#>"
+  comment  = "#>"
 )
 ```
 
-```{r setup}
+```{r}
+#| label: setup
 library(mc3logit)
 ```
 
@@ -42,7 +50,8 @@ Both are returned as instantaneous (most-recent-event) and cumulative
 
 ## A worked example
 
-```{r toy-data}
+```{r}
+#| label: toy-data
 dat <- data.frame(
   event = c(1, 1, 1,  2, 2, 2,  3, 3, 3, 3,  4, 4, 4, 4),
   id    = c(1, 2, 3,  1, 2, 4,  2, 3, 4, 5,  5, 1, 6, 2),
@@ -57,7 +66,8 @@ all "fire") at event 1; individuals `1, 2, 4` are present at event 2 (only
 event -- `exposure_dyn()` sorts internally and returns results back in your
 original row order.
 
-```{r exposure}
+```{r}
+#| label: exposure
 counts <- with(dat, exposure_dyn(
   id_indiv  = id,
   id_events = event,
@@ -82,6 +92,28 @@ fire) at event 3, and fires again at event 4. By event 3, their cumulative
 direct exposure reflects the one time they'd already fired (at event 1);
 by event 4 it's incremented again to reflect event 3's outcome.
 
+### Order invariance
+
+Because the sort happens internally, shuffling the input rows cannot change
+the answer -- a useful property when your event log arrives from a database
+in arbitrary order:
+
+```{r}
+#| label: order-invariance
+set.seed(42)
+shuffled <- dat[sample(nrow(dat)), ]
+
+counts_shuffled <- with(shuffled, exposure_dyn(
+  id_indiv = id, id_events = event, actions = fired, offset = 0
+))
+
+# Put the shuffled result back in the original row order and compare
+identical(
+  unname(counts_shuffled[order(as.integer(rownames(shuffled))), ]),
+  unname(counts)
+)
+```
+
 ## The `offset` argument
 
 `offset` shifts *how far back* "previous" reaches, in units of events. The
@@ -93,7 +125,8 @@ matches how quickly you believe exposure should "count": `offset = 1` is
 the more common choice for a same-day/next-incident lag, while larger
 offsets let you skip a fixed number of intervening incidents.
 
-```{r offset-compare}
+```{r}
+#| label: offset-compare
 c0 <- with(dat, exposure_dyn(id, event, fired, offset = 0))[, "exposure_i"]
 c1 <- with(dat, exposure_dyn(id, event, fired, offset = 1))[, "exposure_i"]
 cbind(dat, exposure_i_offset0 = c0, exposure_i_offset1 = c1)
@@ -104,10 +137,12 @@ cbind(dat, exposure_i_offset0 = c0, exposure_i_offset1 = c1)
 The typical workflow is: compute exposure on your full event log, attach it
 back to your officer-report data frame as a new column, then include it as
 a covariate in `clogit_perm()` just like any other predictor (recall
-`sim_events()`'s own `exposed` column, used throughout
-`vignette("getting-started")`, is conceptually the same kind of variable).
+`sim_events()`'s own `exposed` column, used throughout the
+[getting started](getting-started.html) vignette, is conceptually the same
+kind of variable).
 
-```{r exposure-as-covariate}
+```{r}
+#| label: exposure-as-covariate
 x <- sim_events(nevents = 300, nofficers = 200, seed = 122)
 
 exp_counts <- with(x, exposure_dyn(
@@ -130,5 +165,15 @@ print(ans)
 
 Because `exposure_dyn()` is defined purely from the event log (`id_indiv`,
 `id_events`, `actions`) it composes cleanly with any outcome column,
-including any of the `nsims > 1` replicate outcomes discussed in
-`vignette("simulating-data")`.
+including any of the `nsims > 1` replicate outcomes discussed in the
+[simulating data](simulating-data.html) vignette.
+
+## A caution on interpretation
+
+Exposure covariates built this way are *observational*: an officer whose
+peers act often is also, typically, an officer working the kind of
+assignment where acting is common. `exposure_dyn()` guarantees the
+mechanics (no look-ahead, no self-counting), but it cannot separate peer
+influence from shared context. Conditioning on the incident via `strata()`
+absorbs some of that, which is one more reason the matched-set design is
+worth the trouble here.

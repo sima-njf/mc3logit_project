@@ -1,17 +1,24 @@
 ---
 title: "Getting Started with mc3logit"
-output: rmarkdown::html_vignette
+author: "Sima Najafzadeh"
+date: today
+format:
+  html:
+    toc: true
+    toc-depth: 3
 vignette: >
   %\VignetteIndexEntry{Getting Started with mc3logit}
-  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEngine{quarto::html}
   %\VignetteEncoding{UTF-8}
 ---
 
-```{r, include = FALSE}
+```{r}
+#| label: knitr-setup
+#| include: false
 knitr::opts_chunk$set(
   collapse = TRUE,
-  comment = "#>",
-  fig.width = 7,
+  comment  = "#>",
+  fig.width  = 7,
   fig.height = 5
 )
 ```
@@ -40,10 +47,11 @@ matched-officer data.
 
 ```r
 # install.packages("devtools")
-devtools::install_github("sima-njf/mc3logit_project")
+devtools::install_github("sima-njf/mc3logit_project", build_vignettes = TRUE)
 ```
 
-```{r setup}
+```{r}
+#| label: setup
 library(mc3logit)
 ```
 
@@ -55,7 +63,8 @@ points their firearm is generated from a logistic model that depends on the
 officer's sex, years of experience, whether they were exposed to a previous
 incident, and the violence level of the event.
 
-```{r sim-data}
+```{r}
+#| label: sim-data
 set.seed(1)
 x <- sim_events(
   nevents   = 300,
@@ -75,13 +84,38 @@ Every row is one officer's report for one incident. `incidentid` is the
 matched-set identifier (the *stratum*), and `pointed000001` is the binary
 outcome (did that officer point their gun during that incident).
 
+A quick look at the matched-set structure, which is what makes this a
+conditional-logit problem in the first place:
+
+```{r}
+#| label: strata-structure
+#| collapse: true
+per_incident <- table(x$incidentid)
+
+data.frame(
+  Statistic = c("Reports", "Incidents", "Officers",
+                "Median officers per incident", "Share who pointed"),
+  Value = c(
+    nrow(x),
+    length(unique(x$incidentid)),
+    length(unique(x$officerid)),
+    stats::median(as.numeric(per_incident)),
+    round(mean(x$pointed000001), 3)
+  )
+)
+```
+
+Strata are small -- a handful of officers each -- which is precisely the
+regime where asymptotic standard errors are least trustworthy.
+
 ## Step 2: fit the permutation-based conditional logit
 
 `clogit_perm()` has the same model interface as `survival::clogit()` --
 you write a formula with a `strata()` term for the matched-set id -- plus
 one extra argument, `nperm`, for how many permutations to draw.
 
-```{r fit, cache=TRUE}
+```{r}
+#| label: fit
 ans <- clogit_perm(
   nperm = 1000,
   pointed000001 ~ female + years + exposed + strata(incidentid),
@@ -95,7 +129,8 @@ Internally this:
 1. Fits the baseline model once with `survival::clogit()`.
 2. Uses `find_candidates()` to figure out, for every officer/report, which
    other rows could plausibly be swapped with it (see the
-   `vignette("permutation-inference")` vignette for the matching rule).
+   [permutation inference](permutation-inference.html) vignette for the
+   matching rule).
 3. Draws `nperm` permutations of the outcome with `permute()`, refits the
    model each time, and collects the coefficient estimates.
 4. Turns the spread of those `nperm` coefficient estimates into two-sided
@@ -103,7 +138,8 @@ Internally this:
 
 ## Step 3: read the results
 
-```{r print}
+```{r}
+#| label: print
 print(ans)
 ```
 
@@ -113,7 +149,8 @@ instead. Stars follow the usual convention (`***` p <= .01, `**` p <= .05,
 `*` p <= .1), where the p-value is the *permutation* p-value, not the
 Wald p-value from `clogit()`.
 
-```{r plot}
+```{r}
+#| label: plot
 plot(ans, odds = TRUE)
 ```
 
@@ -126,12 +163,14 @@ the fastest way to communicate results in a talk or paper.
 `clogit_perm` objects support the usual accessor generics, so they play
 nicely with other tools:
 
-```{r accessors}
-coef(ans)           # point estimates, from the baseline clogit() fit
-confint(ans)         # normal-approximation CI built from the permutation p-values
-head(vcov(ans))       # covariance matrix estimated *from* the permutation draws
-nobs(ans)             # number of observations used in the baseline fit
-formula(ans)          # the model formula
+```{r}
+#| label: accessors
+#| collapse: true
+coef(ans)        # point estimates, from the baseline clogit() fit
+confint(ans)     # normal-approximation CI built from the permutation p-values
+head(vcov(ans))  # covariance matrix estimated *from* the permutation draws
+nobs(ans)        # number of observations used in the baseline fit
+formula(ans)     # the model formula
 ```
 
 Two flavors of confidence interval are available through the `which.`
@@ -144,18 +183,55 @@ argument of `confint()`:
 - `which. = "dist"` (anything other than `"coef"`): the raw empirical
   quantiles of the permutation distribution itself.
 
-```{r confint-variants}
+```{r}
+#| label: confint-variants
+#| collapse: true
 confint(ans, which. = "coef")
 confint(ans, which. = "coef", sigma_perm = TRUE)
 ```
 
-See `vignette("permutation-inference")` for the details of how the
-p-values and both types of interval are constructed, and
-`vignette("simulating-data")` / `vignette("dynamic-exposure")` for the two
-data-generation helpers (`sim_events()`/`sim_events2()` and
-`exposure_dyn()`) used to build the covariates above.
+## How to compare against the asymptotic answer
+
+Because `clogit_perm()` keeps the baseline `survival::clogit()` fit in
+`$fit`, you can put the permutation p-values next to the Wald p-values and
+see directly where the two approaches disagree:
+
+```{r}
+#| label: wald-vs-perm
+wald <- summary(ans$fit)$coefficients
+
+data.frame(
+  Term      = rownames(wald),
+  Estimate  = round(wald[, "coef"], 3),
+  Wald_p    = round(wald[, "Pr(>|z|)"], 4),
+  Perm_p    = round(ans$pvals, 4),
+  row.names = NULL
+)
+```
+
+Where the two columns agree, the asymptotics were fine and the permutation
+test simply confirms them. Where they diverge, it is usually a sign that
+some stratum is small or nearly separable, and the permutation p-value is
+the one to trust.
+
+## Where to go next
+
+- [How the permutation inference works](permutation-inference.html) --
+  how `find_candidates()`/`permute()` build valid within-stratum
+  permutations, and how the p-values and both interval types are computed.
+- [Simulating matched case-control data](simulating-data.html) --
+  the `sim_events()`/`sim_events2()` data-generating process.
+- [Dynamic exposure covariates](dynamic-exposure.html) --
+  building running exposure measures with `exposure_dyn()`.
+- [Validating the method](validation.html) -- type-I error and power of
+  the permutation test under a known truth.
 
 ## References
 
+Knijnenburg, T. A., Wessels, L. F. A., Reinders, M. J. T., & Shmulevich, I.
+(2009). Fewer permutations, more accurate P-values. *Bioinformatics*,
+25(12), 161-168. <doi:10.1093/bioinformatics/btp211>
+
 Ridgeway, G. (2016). Officer risk factors associated with police shootings:
 a matched case-control study. *Statistics and Public Policy*, 3(1), 1-6.
+<doi:10.1080/2330443X.2015.1129918>

@@ -5,6 +5,11 @@ using namespace Rcpp;
 // This classes assume there are no duplicates at the level (person, event),
 // and data is properly sorted by (time, event)
 
+// Anonymous namespace: gives these helper types internal linkage so they
+// cannot collide at link time with same-named classes defined in other
+// translation units of this package (e.g. simforce.cpp's unrelated `Event`).
+namespace {
+
 class PersonDyn;
 
 class Event {
@@ -46,6 +51,8 @@ inline void PersonDyn::add_event(int loc, Event* e)
   event_loc.push_back(loc);
   events.push_back(e);
 }
+
+} // anonymous namespace
 
 // Data must be sorted by individual
 // [[Rcpp::export(rng = false, name = "exposure_dyn_")]]
@@ -105,7 +112,7 @@ List exposure(
 
     // Otherwise, the individual has many more events
     // ycum(t) = y(t) + ycum(t-1)
-    for (int i = 1; i < p.events.size(); ++i)
+    for (std::size_t i = 1u; i < p.events.size(); ++i)
       cumuse[p.event_loc[i]] += cumuse[p.event_loc[i-1]];
 
   }
@@ -234,13 +241,13 @@ List exposure(
       }
 
       // Once all peers checked, we go to the next event
-      if ((++event_num) >= p.event_loc.size())
+      if ((++event_num) >= static_cast<int>(p.event_loc.size()))
         break;
 
     }
 
     // Once we are done computing the exposures, we can apply the offset as needed
-    for (int i = offset; i < p.event_loc.size(); ++i)
+    for (int i = offset; i < static_cast<int>(p.event_loc.size()); ++i)
     {
       exposure_i[p.event_loc[i]] = exp_i_tmp[i - offset];
       exposure_d[p.event_loc[i]] = exp_d_tmp[i - offset];

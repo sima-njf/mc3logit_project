@@ -1,22 +1,30 @@
 ---
 title: "Simulating Matched Case-Control Data"
-output: rmarkdown::html_vignette
+author: "Sima Najafzadeh"
+date: today
+format:
+  html:
+    toc: true
+    toc-depth: 3
 vignette: >
   %\VignetteIndexEntry{Simulating Matched Case-Control Data}
-  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEngine{quarto::html}
   %\VignetteEncoding{UTF-8}
 ---
 
-```{r, include = FALSE}
+```{r}
+#| label: knitr-setup
+#| include: false
 knitr::opts_chunk$set(
   collapse = TRUE,
-  comment = "#>",
-  fig.width = 7,
+  comment  = "#>",
+  fig.width  = 7,
   fig.height = 5
 )
 ```
 
-```{r setup}
+```{r}
+#| label: setup
 library(mc3logit)
 ```
 
@@ -52,13 +60,16 @@ simulations.
 Every row of the returned data frame is one officer's report for one
 incident.
 
-```{r sim-basic}
+```{r}
+#| label: sim-basic
 set.seed(1)
 x <- sim_events(nevents = 1000, nofficers = 400)
 str(x)
 ```
 
-```{r sim-columns, echo = FALSE, results = "asis"}
+```{r}
+#| label: sim-columns
+#| echo: false
 knitr::kable(data.frame(
   column = c(
     "officerid", "female", "years", "fixed_effect", "incidentid",
@@ -85,9 +96,10 @@ knitr::kable(data.frame(
 Every `par_*` argument is a coefficient in the underlying logistic model,
 so you can dial in exactly the effect sizes you want to test for:
 
-```{r sim-tuned, cache=TRUE}
+```{r}
+#| label: sim-tuned
 x <- sim_events(
-  nevents             = 20000,
+  nevents             = 10000,
   nofficers           = 200,
   par_officer_female  = -.5,
   par_officer_years   = -.5,
@@ -104,7 +116,8 @@ that a *full* model (one that also knows the latent `fixed_effect` and
 `violence_level`, which a real analysis usually cannot observe) recovers
 them:
 
-```{r sim-recover}
+```{r}
+#| label: sim-recover
 ans <- glm(
   pointed000001 ~ -1 + female + years + exposed + I(-first) + fixed_effect +
     violence_level,
@@ -112,6 +125,25 @@ ans <- glm(
 )
 summary(ans)
 ```
+
+Lining the estimates up against the values we asked for makes the recovery
+check explicit:
+
+```{r}
+#| label: recovery-table
+truth <- c(female = -.5, years = -.5, exposed = .25, violence_level = 1)
+est   <- coef(ans)[names(truth)]
+
+data.frame(
+  Term     = names(truth),
+  Truth    = as.numeric(truth),
+  Estimate = round(as.numeric(est), 3),
+  Error    = round(as.numeric(est) - as.numeric(truth), 3)
+)
+```
+
+The estimates should land close to the values passed in; residual
+discrepancy shrinks as `nevents` grows.
 
 ## Multiple replicate outcomes: `nsims`
 
@@ -121,31 +153,17 @@ hence covariates) fixed. Setting `nsims > 1` does exactly that: the officer
 and incident structure is generated once, and `nsims` independent outcome
 columns (`pointed000001`, `pointed000002`, ...) are appended.
 
-```{r sim-nsims}
+```{r}
+#| label: sim-nsims
 x <- sim_events(nevents = 200, nofficers = 150, nsims = 5, seed = 10)
 grep("^pointed", colnames(x), value = TRUE)
 ```
 
-This is the pattern you'd use to, for example, estimate the empirical
-size of `clogit_perm()`'s permutation test under a true null: simulate many
-replicate outcomes with `par_officer_female = 0` and check that the
-fraction of replicates with `pvals["female"] <= .05` is close to `0.05`.
-
-```{r type1-sketch, eval = FALSE}
-reps <- sim_events(
-  nevents = 300, nofficers = 200, nsims = 200,
-  par_officer_female = 0,   # true null for "female"
-  seed = 99
-)
-
-rejected <- sapply(grep("^pointed", colnames(reps), value = TRUE), function(outcome) {
-  f <- as.formula(paste(outcome, "~ female + years + strata(incidentid)"))
-  fit <- clogit_perm(nperm = 500, f, data = reps, ncpus = 1)
-  fit$pvals["female"] <= .05
-})
-
-mean(rejected)  # should be close to 0.05
-```
+Because the covariates are shared across replicates, differences between
+outcome columns are pure sampling variation in the outcome-generating
+process -- which is exactly what you want when estimating the size or power
+of a test. The [validation vignette](validation.html) uses this to measure
+the empirical type-I error rate and power of `clogit_perm()` directly.
 
 ## Using your own officers and events: `sim_events2()`
 
@@ -155,7 +173,8 @@ and incidents and just want to simulate *reactions* on top of them, use
 `sim_events2()` instead -- it takes the event/officer structure as input
 rather than generating it:
 
-```{r sim-events2}
+```{r}
+#| label: sim-events2
 set.seed(2)
 n_reports <- 500
 
@@ -178,8 +197,24 @@ the same group sizes) while simulating counterfactual outcome-generating
 processes on top of it -- e.g. to build a study-specific power curve before
 collecting or requesting real data.
 
+## Which simulator should I use?
+
+| | `sim_events()` | `sim_events2()` |
+|:--|:--|:--|
+| Officer roster | generated for you | you supply it |
+| Incident structure | generated for you | you supply it |
+| Covariates | simulated | taken from your inputs |
+| Typical use | learning, generic power studies | study-specific power, counterfactuals on a real design |
+
+Both accept the same `par_*` coefficients and the same `nsims` and `seed`
+arguments, so you can move between them without rewriting your analysis
+code.
+
 ## Next steps
 
-See `vignette("getting-started")` for fitting `clogit_perm()` on simulated
-data end to end, and `vignette("dynamic-exposure")` for computing exposure
-covariates (like the `exposed` column above) from a raw event log.
+- [Getting started](getting-started.html) -- fitting `clogit_perm()` on
+  simulated data end to end.
+- [Dynamic exposure](dynamic-exposure.html) -- computing exposure
+  covariates (like the `exposed` column above) from a raw event log.
+- [Validating the method](validation.html) -- putting these simulators to
+  work measuring type-I error and power.

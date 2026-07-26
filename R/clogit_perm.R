@@ -47,17 +47,30 @@ clogit_perm <- function(
   if (any(is.na(groups)))
     stop("There are missings in the strata() term.")
 
-    # Finding candidates
-  groups <- cbind(groups)
-  candidates <- find_candidates(
-    features = groups,
-    upper    = 0,
-    lower    = 0,
-    as_abs   = TRUE
-  )
+  # Row positions belonging to each stratum. Strata of size one can never be
+  # permuted, so they are dropped up front.
+  candidates <- split(seq_along(groups), groups)
+  candidates <- candidates[lengths(candidates) > 1L]
 
-  # Generating the permutations
-  ORD <- replicate(nperm, permute(candidates) + 1L, simplify = FALSE)
+  # Generating the permutations.
+  #
+  # Each draw is a *uniform* shuffle of the row positions within every stratum.
+  # This matters: an earlier implementation built a random pairwise matching
+  # via permute(), which can never leave a row in place, and so was effectively
+  # deterministic for the two-row strata that dominate matched case-control
+  # data. That collapsed the spread of the reference distribution and made the
+  # test badly anti-conservative.
+  nrows <- length(groups)
+  ORD <- replicate(
+    nperm,
+    {
+      ord <- seq_len(nrows)
+      for (idx in candidates)
+        ord[idx] <- sample(idx)
+      ord
+    },
+    simplify = FALSE
+  )
 
   # Baseline model
   model0 <- survival::clogit(formula = formula, data = data, ...)
@@ -112,6 +125,14 @@ clogit_perm <- function(
   # Checking errors
   is_err <- sapply(coefs, inherits, what = "character")
 
+  # Capturing the messages *before* -coefs- is collapsed into a matrix,
+  # otherwise the failed fits are no longer recoverable.
+  err_msg <- vapply(
+    coefs[is_err],
+    function(e) paste(as.character(e), collapse = " "),
+    character(1L)
+  )
+
   # Building a list
   coefs <- do.call(rbind, coefs[!is_err])
 
@@ -132,7 +153,11 @@ clogit_perm <- function(
       coefs      = coefs,
       candidates = candidates,
       formula    = formula,
-      errors     = data.frame(id = which(is_err), msg = coefs[which(is_err)], stringsAsFactors = TRUE)
+      errors     = data.frame(
+        id  = which(is_err),
+        msg = unname(err_msg),
+        stringsAsFactors = FALSE
+      )
       ),
     class = "clogit_perm"
   )
@@ -143,7 +168,7 @@ clogit_perm <- function(
 coef.clogit_perm <- function(object, ...) stats::coef(object$fit)
 
 #' @export
-vcov.clogit_perm <- function(object, ...) cov(object$coefs)
+vcov.clogit_perm <- function(object, ...) stats::cov(object$coefs)
 
 #' @export
 formula.clogit_perm <- function(x, ...) x$formula
@@ -182,9 +207,9 @@ confint.clogit_perm <- function(
     sigma <- if (sigma_perm)
       sqrt(diag(stats::vcov(object)))
     else
-      abs(coe/qnorm(object$pvals/2)) # abs(coe/qt(object$pvals/2, df = df))
+      abs(coe/stats::qnorm(object$pvals/2)) # abs(coe/qt(object$pvals/2, df = df))
     a     <- (1 - level)/2
-    pm    <- qnorm(p = a) * sigma # qt(p = a, df = df) * sigma
+    pm    <- stats::qnorm(p = a) * sigma # qt(p = a, df = df) * sigma
 
     ans <- cbind(coe + pm, coe - pm)
     colnames(ans) <- sprintf("%.1f %%", c(a, 1 - a)*100)

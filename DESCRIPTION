@@ -1,34 +1,50 @@
 Package: mc3logit
 Type: Package
-Title: Matched Case-Control Conditional Logit
+Title: Permutation-Based Inference for Matched Case-Control Conditional Logit
 Version: 0.1.0
 Authors@R: c(
-    person("George G", "Vega Yon", role = "aut",
-           comment = "Original author; see LICENSE"),
-    person("Sima", "Najafzadeh", email = "u1418987@umail.utah.edu", role = "cre")
+    person("Sima", "Najafzadeh", email = "u1418987@umail.utah.edu",
+           role = c("aut", "cre"),
+           comment = c(ORCID = "0009-0002-6253-2910")),
+    person("George G.", "Vega Yon", email = "g.vegayon@gmail.com",
+           role = "aut",
+           comment = c(ORCID = "0000-0002-3171-0844"))
     )
-Description: The "mc3logit" package implements permutation-based inference for
-  conditional logistic regression models. Permutation-based methods for matched
-  case-control logit were notably used by Ridgeway (2016). The package includes
-  tools for fitting permutation-based conditional logit models
-  (clogit_perm()), simulating matched case-control event data (sim_events(),
-  sim_events2()), and computing dynamic exposure covariates (exposure_dyn()).
+Description: Implements permutation-based inference for conditional logistic
+    regression fitted to matched case-control data, where several units share
+    an event (a matched set) and only some of them act. Rather than relying on
+    the asymptotic standard errors reported by 'survival::clogit()', which can
+    be unreliable with many small strata or rare outcomes, the outcome is
+    repeatedly shuffled within matched sets and the model refitted to build an
+    empirical null distribution for each coefficient. Zero p-values are
+    replaced by a pseudo-count following Knijnenburg et al. (2009)
+    <doi:10.1093/bioinformatics/btp211>. The package also provides simulators
+    for matched case-control event data and a helper for computing running
+    exposure covariates from a longitudinal event log. The approach follows
+    Ridgeway (2016) <doi:10.1080/2330443X.2015.1129918>.
 License: MIT + file LICENSE
 Encoding: UTF-8
 LazyData: true
 Roxygen: list(markdown = TRUE)
-RoxygenNote: 7.1.2
+RoxygenNote: 7.3.1
 LinkingTo:
     Rcpp
 Imports:
-    Rcpp,stats,parallel,graphics
+    graphics,
+    parallel,
+    Rcpp,
+    stats,
+    utils
 Depends:
+    R (>= 4.0.0),
     survival
 Suggests:
     knitr,
+    quarto,
     rmarkdown,
     testthat (>= 3.0.0)
-VignetteBuilder: knitr
+VignetteBuilder: quarto
 Config/testthat/edition: 3
-URL: https://github.com/sima-njf/mc3logit_project
+URL: https://sima-njf.github.io/mc3logit_project/,
+    https://github.com/sima-njf/mc3logit_project
 BugReports: https://github.com/sima-njf/mc3logit_project/issues

@@ -1,0 +1,290 @@
+---
+title: "Validating the Permutation Test"
+author: "Sima Najafzadeh"
+date: today
+format:
+  html:
+    toc: true
+    toc-depth: 3
+vignette: >
+  %\VignetteIndexEntry{Validating the Permutation Test}
+  %\VignetteEngine{quarto::html}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r}
+#| label: knitr-setup
+#| include: false
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment  = "#>",
+  fig.width  = 7,
+  fig.height = 4.5
+)
+```
+
+```{r}
+#| label: setup
+library(mc3logit)
+```
+
+A test is only worth using if it does what it claims: reject a true null
+about as often as its nominal level says it should, and reject a false null
+more often than that. Because `sim_events()` generates data from a *known*
+model, we can measure both directly rather than taking them on faith.
+
+This vignette does that, and reports one result that is good and one that
+is a genuine limitation you should know about before using the package.
+
+```{r}
+#| label: study-size
+n_rep  <- 40    # replicate outcome draws per scenario
+n_perm <- 100   # permutations per fit
+alpha  <- 0.05  # nominal level
+```
+
+The study is deliberately small so the vignette builds quickly; with
+`r n_rep` replicates the Monte Carlo standard error on a rate near 0.05 is
+about `r round(sqrt(0.05 * 0.95 / n_rep), 3)`, so read everything below as
+"the right neighbourhood," not a precise estimate. Raising `n_rep` and
+`n_perm` is what you would do for a real simulation study.
+
+## The experiment
+
+`sim_events(nsims = n_rep)` generates the officer/incident structure once
+and then draws `n_rep` **independent outcome columns** on top of it. Every
+replicate shares the same covariates and the same matched-set design and
+differs only in the realized outcome -- exactly what is needed to estimate
+the sampling distribution of a test statistic.
+
+```{r}
+#| label: helper
+study <- function(par_female, par_years, seed) {
+
+  dat <- sim_events(
+    nevents            = 150,
+    nofficers          = 100,
+    nsims              = n_rep,
+    par_officer_female = par_female,
+    par_officer_years  = par_years,
+    par_exposure_event = 0,
+    par_exposure_prev  = 0,
+    par_event_violence = 0,
+    par_officer_fe     = 0,
+    seed               = seed
+  )
+
+  outcomes <- grep("^pointed", colnames(dat), value = TRUE)
+
+  res <- vapply(outcomes, function(outcome) {
+
+    f <- stats::as.formula(
+      paste(outcome, "~ female + years + strata(incidentid)")
+    )
+
+    fit <- try(
+      suppressWarnings(
+        clogit_perm(nperm = n_perm, f, data = dat, ncpus = 1)
+      ),
+      silent = TRUE
+    )
+
+    if (inherits(fit, "try-error"))
+      return(c(perm = NA_real_, wald = NA_real_, beta = NA_real_, sd_perm = NA_real_))
+
+    wald <- summary(fit$fit)$coefficients
+
+    c(
+      perm    = unname(fit$pvals["female"]),
+      wald    = unname(wald["female", "Pr(>|z|)"]),
+      beta    = unname(stats::coef(fit)["female"]),
+      sd_perm = stats::sd(fit$coefs[, "female"])
+    )
+
+  }, numeric(4))
+
+  as.data.frame(t(res))
+}
+```
+
+## Part 1: type-I error under a complete null
+
+Here nothing at all affects the outcome, so `female` is genuinely
+irrelevant and the permutation is exact. This is the case the method
+*must* get right.
+
+```{r}
+#| label: null-run
+null_res <- study(par_female = 0, par_years = 0, seed = 4001)
+
+data.frame(
+  Test           = c("Permutation", "Wald"),
+  Rejection_rate = round(c(mean(null_res$perm <= alpha, na.rm = TRUE),
+                           mean(null_res$wald <= alpha, na.rm = TRUE)), 3),
+  Nominal        = alpha
+)
+```
+
+A sharper diagnostic than the rejection rate is whether the reference
+distribution has the *right width*. Compare the average spread of the
+permutation draws against the true sampling variability of the coefficient
+across replicates -- the ratio should be close to 1:
+
+```{r}
+#| label: null-spread
+data.frame(
+  sd_true  = round(stats::sd(null_res$beta, na.rm = TRUE), 3),
+  sd_perm  = round(mean(null_res$sd_perm, na.rm = TRUE), 3),
+  ratio    = round(mean(null_res$sd_perm, na.rm = TRUE) /
+                     stats::sd(null_res$beta, na.rm = TRUE), 3)
+)
+```
+
+Under a true null, p-values should also be roughly **uniform** on
+$[0, 1]$, not merely small 5% of the time:
+
+```{r}
+#| label: null-uniformity
+#| fig-height: 4
+op <- par(mfrow = c(1, 2), mar = c(4, 4, 3, 1))
+
+hist(
+  null_res$perm,
+  breaks = seq(0, 1, by = 0.1),
+  main = "Permutation p-values\n(complete null)",
+  xlab = "p-value", col = "grey85", border = "white"
+)
+abline(h = sum(!is.na(null_res$perm)) / 10, col = "firebrick", lwd = 2, lty = 2)
+
+obs <- sort(null_res$perm[!is.na(null_res$perm)])
+plot(
+  stats::ppoints(length(obs)), obs,
+  xlab = "Theoretical uniform quantile", ylab = "Observed p-value",
+  main = "P-P plot (complete null)", pch = 19, col = "grey40"
+)
+abline(0, 1, col = "firebrick", lwd = 2)
+
+par(op)
+```
+
+Permutation p-values are *discrete* -- with `nperm = `r n_perm`` they live
+on a grid of width `1/n_perm`, which shows up as visible steps.
+
+## Part 2: power under a real effect
+
+```{r}
+#| label: power-run
+alt_res <- study(par_female = -1.2, par_years = 0, seed = 4002)
+
+data.frame(
+  Test           = c("Permutation", "Wald"),
+  Rejection_rate = round(c(mean(alt_res$perm <= alpha, na.rm = TRUE),
+                           mean(alt_res$wald <= alpha, na.rm = TRUE)), 3)
+)
+```
+
+```{r}
+#| label: power-hist
+hist(
+  alt_res$perm,
+  breaks = seq(0, 1, by = 0.05),
+  main = "Permutation p-values (true effect = -1.2)",
+  xlab = "p-value", col = "grey85", border = "white"
+)
+abline(v = alpha, col = "firebrick", lwd = 2, lty = 2)
+```
+
+Under a real effect the p-values pile up near zero instead of spreading
+out. The gap between this histogram and the flat one above is the power of
+the test.
+
+## Part 3: a limitation -- nuisance covariates with real effects {#sec-limitation}
+
+Everything above held *all* other coefficients at zero. Now keep
+`female` null but let `years` genuinely affect the outcome:
+
+```{r}
+#| label: nuisance-run
+nuis_res <- study(par_female = 0, par_years = -0.5, seed = 4003)
+
+data.frame(
+  Scenario       = c("complete null", "years effect present"),
+  Rejection_rate = round(c(mean(null_res$perm <= alpha, na.rm = TRUE),
+                           mean(nuis_res$perm <= alpha, na.rm = TRUE)), 3),
+  sd_ratio       = round(c(
+    mean(null_res$sd_perm, na.rm = TRUE) / stats::sd(null_res$beta, na.rm = TRUE),
+    mean(nuis_res$sd_perm, na.rm = TRUE) / stats::sd(nuis_res$beta, na.rm = TRUE)
+  ), 3),
+  Nominal        = alpha
+)
+```
+
+The test **over-rejects** in the second row, and the `sd_ratio` column
+shows why: the permutation reference distribution is too narrow relative to
+the coefficient's real sampling variability.
+
+This is not a bug in the shuffling -- it is intrinsic to permuting the raw
+outcome. Shuffling `y` within strata destroys the association between the
+outcome and *every* covariate, so the reference distribution is built under
+the **complete** null ("nothing matters") rather than the **partial** null
+actually being tested ("`female` doesn't matter, but `years` does"). When a
+nuisance covariate carries real signal, the complete-null distribution is
+too tight and p-values come out too small.
+
+::: {.callout-important}
+## Practical guidance
+
+Treat `clogit_perm()` p-values as trustworthy when the other covariates in
+the model are weak or the model is effectively univariate, and as
+**anti-conservative** when a nuisance covariate carries substantial signal.
+In the latter case, cross-check against the Wald p-value in `$fit` and
+prefer the more conservative of the two.
+
+The standard remedy is residual permutation -- Freedman & Lane (1983) or
+ter Braak (1992) -- which permutes residuals from the model fitted under
+the partial null instead of the raw outcome. That is not currently
+implemented here.
+:::
+
+## Takeaways
+
+- Under a **complete null** the test is well calibrated: p-values are
+  roughly uniform and the rejection rate is near nominal.
+- Under a **real effect** it has good power.
+- With a **nuisance covariate carrying real signal** it is
+  anti-conservative, for the structural reason described in
+  [Part 3](#sec-limitation). This is a property of raw-outcome permutation,
+  not of this implementation specifically.
+
+::: {.callout-note}
+## Historical note
+
+Before version 0.1.0, `clogit_perm()` drew permutations with `permute()`,
+which builds a pairwise matching and can never leave a row in place. For
+the two-row strata that dominate matched case-control data that made the
+draw deterministic, collapsing the reference distribution and pushing the
+complete-null rejection rate to roughly 0.2 against a nominal 0.05.
+`clogit_perm()` now uses a uniform within-stratum shuffle, which is what
+Part 1 measures.
+:::
+
+## References
+
+Freedman, D., & Lane, D. (1983). A nonstochastic interpretation of reported
+significance levels. *Journal of Business & Economic Statistics*, 1(4),
+292-298.
+
+ter Braak, C. J. F. (1992). Permutation versus bootstrap significance tests
+in multiple regression and ANOVA. In *Bootstrapping and Related
+Techniques*, 79-85.
+
+Knijnenburg, T. A., Wessels, L. F. A., Reinders, M. J. T., & Shmulevich, I.
+(2009). Fewer permutations, more accurate P-values. *Bioinformatics*,
+25(12), 161-168. <doi:10.1093/bioinformatics/btp211>
+
+## Next steps
+
+- [How the permutation inference works](permutation-inference.html) -- the
+  construction being validated here.
+- [Simulating matched case-control data](simulating-data.html) -- the
+  `nsims` mechanism this vignette relies on.

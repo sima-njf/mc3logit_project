@@ -69,7 +69,7 @@ print.clogit_perm <- function(x, odds = TRUE, labels = NULL, out = "ascii", ...)
 approx_sd <- function(b, pval) {
 
   f <- function(s) {
-    p <- pnorm(b, mean = 0, sd = s)
+    p <- stats::pnorm(b, mean = 0, sd = s)
     p <- ifelse(p > .1, 1 - p, p)
     (pval - p)^2
   }

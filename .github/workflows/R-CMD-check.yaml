@@ -5,8 +5,14 @@ on:
     branches: [main, master]
   pull_request:
     branches: [main, master]
+  workflow_dispatch:
 
 name: R-CMD-check
+
+permissions: read-all
+
+env:
+  GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
 
 jobs:
   R-CMD-check:
@@ -20,18 +26,21 @@ jobs:
         config:
           - {os: macos-latest,   r: 'release'}
           - {os: windows-latest, r: 'release'}
-          - {os: ubuntu-latest,   r: 'devel', http-user-agent: 'release'}
-          - {os: ubuntu-latest,   r: 'release'}
-          - {os: ubuntu-latest,   r: 'oldrel-1'}
+          - {os: windows-latest, r: 'devel', http-user-agent: 'release'}
+          - {os: ubuntu-latest,  r: 'devel', http-user-agent: 'release'}
+          - {os: ubuntu-latest,  r: 'release'}
+          - {os: ubuntu-latest,  r: 'oldrel-1'}
 
     env:
-      GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
       R_KEEP_PKG_SOURCE: yes
 
     steps:
       - uses: actions/checkout@v4
 
       - uses: r-lib/actions/setup-pandoc@v2
+
+      # Quarto CLI: the vignettes are .qmd and will not build without it
+      - uses: quarto-dev/quarto-actions/setup@v2
 
       - uses: r-lib/actions/setup-r@v2
         with:
@@ -41,10 +50,39 @@ jobs:
 
       - uses: r-lib/actions/setup-r-dependencies@v2
         with:
-          extra-packages: any::rcmdcheck
+          extra-packages: |
+            any::rcmdcheck
+            any::quarto
+            local::.
           needs: check
 
+      # Linux release is the strictest configuration: --as-cran, and any
+      # WARNING fails the build.
       - uses: r-lib/actions/check-r-package@v2
+        if: ${{ matrix.config.os == 'ubuntu-latest' && matrix.config.r == 'release' }}
         with:
+          args: 'c("--no-manual", "--as-cran")'
+          error-on: '"warning"'
           upload-snapshots: true
-          build_args: 'c("--no-manual", "--compact-vignettes=gs+qpdf")'
+          check-dir: '"check"'
+
+      # Everything else: still fail on warnings, but without --as-cran
+      - uses: r-lib/actions/check-r-package@v2
+        if: ${{ matrix.config.os != 'ubuntu-latest' || matrix.config.r != 'release' }}
+        with:
+          args: 'c("--no-manual")'
+          error-on: '"warning"'
+          upload-snapshots: true
+          check-dir: '"check"'
+
+      # Publish an installable source tarball for the two Linux jobs
+      - name: Build source tarball
+        if: ${{ matrix.config.os == 'ubuntu-latest' && (matrix.config.r == 'release' || matrix.config.r == 'devel') }}
+        run: R CMD build --no-build-vignettes .
+
+      - uses: actions/upload-artifact@v4
+        if: ${{ matrix.config.os == 'ubuntu-latest' && (matrix.config.r == 'release' || matrix.config.r == 'devel') }}
+        with:
+          name: mc3logit-tarball-${{ matrix.config.os }}-${{ matrix.config.r }}
+          path: mc3logit_*.tar.gz
+          retention-days: 7

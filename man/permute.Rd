@@ -15,3 +15,27 @@ An integer vector (indexed from 0) with the permuted version of the data.
 \description{
 Random permutation of the data as a function of \code{find_candidates}
 }
+\details{
+The permutation is built as a random \emph{pairwise matching}: rows that are
+mutual candidates are repeatedly paired off and swapped. A row is left in
+place only when every one of its candidates has already been paired.
+}
+\section{Warning}{
+
+This draw is \strong{not} uniform over the valid permutations, because the
+identity is essentially unreachable -- \code{find_candidates()} never lists a row
+as its own candidate, so a row is swapped whenever any partner is free. For
+a group of two mutual candidates the result is therefore deterministic (the
+pair always trades places), where a uniform draw would leave it untouched
+half the time.
+
+Using this directly to build a reference distribution will understate its
+spread and produce anti-conservative p-values. \code{\link[=clogit_perm]{clogit_perm()}} does not use
+it for that reason: it draws a uniform shuffle within each stratum instead.
+\code{permute()} remains exported for inspecting the candidate structure and for
+backwards compatibility.
+}
+
+\seealso{
+\code{\link[=clogit_perm]{clogit_perm()}}, \code{\link[=find_candidates]{find_candidates()}}
+}

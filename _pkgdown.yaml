@@ -1,0 +1,77 @@
+url: https://sima-njf.github.io/mc3logit_project/
+
+template:
+  bootstrap: 5
+  bslib:
+    primary: "#1b4965"
+    base_font: {google: "Source Sans Pro"}
+    code_font: {google: "Source Code Pro"}
+
+home:
+  title: "Permutation-based inference for matched case-control conditional logit"
+  description: >
+    Permutation-based p-values and confidence intervals for conditional
+    logistic regression on matched case-control data, plus simulators and
+    dynamic exposure helpers.
+
+navbar:
+  structure:
+    left:  [intro, reference, articles, news]
+    right: [search, github]
+
+reference:
+- title: Model fitting
+  desc: >
+    Conditional logit with permutation-based inference, and the methods for
+    inspecting a fitted model.
+  contents:
+  - clogit_perm
+  - confint.clogit_perm
+  - print.clogit_perm
+  - plot.clogit_perm
+
+- title: Likelihood
+  desc: The exact conditional log-likelihood for a single matched set.
+  contents:
+  - clogit_loglike
+
+- title: Simulation
+  desc: >
+    Generating matched case-control event data, either from scratch or on top
+    of an existing event/individual structure.
+  contents:
+  - sim_events
+
+- title: Exposure
+  desc: >
+    Running direct and indirect exposure covariates computed from a
+    longitudinal event log.
+  contents:
+  - exposure_dyn
+
+- title: Permutation internals
+  desc: >
+    Low-level helpers for building permutation candidate structures. See the
+    warning in `permute()` before using these to build a reference
+    distribution.
+  contents:
+  - find_candidates
+  - permute
+
+articles:
+- title: Get started
+  navbar: ~
+  contents:
+  - getting-started
+
+- title: How it works
+  navbar: Methods
+  contents:
+  - permutation-inference
+  - validation
+
+- title: Data and covariates
+  navbar: Data
+  contents:
+  - simulating-data
+  - dynamic-exposure
