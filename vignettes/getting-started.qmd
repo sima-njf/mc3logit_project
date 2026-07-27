@@ -1,6 +1,6 @@
 ---
 title: "Getting Started with mc3logit"
-author: "Sima Najafzadeh"
+author: "Sima Najafzadehkhoei"
 date: today
 format:
   html:

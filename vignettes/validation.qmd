@@ -1,6 +1,6 @@
 ---
 title: "Validating the Permutation Test"
-author: "Sima Najafzadeh"
+author: "Sima Najafzadehkhoei"
 date: today
 format:
   html:

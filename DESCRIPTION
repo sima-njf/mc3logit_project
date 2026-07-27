@@ -3,7 +3,7 @@ Type: Package
 Title: Permutation-Based Inference for Matched Case-Control Conditional Logit
 Version: 0.1.0
 Authors@R: c(
-    person("Sima", "Najafzadeh", email = "u1418987@umail.utah.edu",
+    person("Sima", "Najafzadehkhoei", email = "u1418987@umail.utah.edu",
            role = c("aut", "cre"),
            comment = c(ORCID = "0009-0002-6253-2910")),
     person("George G.", "Vega Yon", email = "g.vegayon@gmail.com",

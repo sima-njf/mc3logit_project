@@ -8,7 +8,7 @@ tags:
   - criminology
   - resampling
 authors:
-  - name: Sima Najafzadeh
+  - name: Sima Najafzadehkhoei
     orcid: 0009-0002-6253-2910
     corresponding: true
     affiliation: 1

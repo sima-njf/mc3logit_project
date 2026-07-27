@@ -1,6 +1,6 @@
 ---
 title: "Simulating Matched Case-Control Data"
-author: "Sima Najafzadeh"
+author: "Sima Najafzadehkhoei"
 date: today
 format:
   html:

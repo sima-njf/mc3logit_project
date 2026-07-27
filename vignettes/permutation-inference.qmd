@@ -1,6 +1,6 @@
 ---
 title: "How the Permutation Inference Works"
-author: "Sima Najafzadeh"
+author: "Sima Najafzadehkhoei"
 date: today
 format:
   html:

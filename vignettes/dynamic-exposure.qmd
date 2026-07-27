@@ -1,6 +1,6 @@
 ---
 title: "Computing Dynamic Exposure"
-author: "Sima Najafzadeh"
+author: "Sima Najafzadehkhoei"
 date: today
 format:
   html:
